@@ -268,8 +268,14 @@ function renderInlineText(value) {
   }
   return html + formatInlineText(text.slice(last))
 }
+// Unicode line/paragraph separators would otherwise split a line for some
+// regexes but not others, so every renderer works on plain \n lines.
+function normalizeContentLines(content) {
+  return String(content || '').replace(/\r\n?|[\u2028\u2029\u0085]/g, '\n')
+}
+const HEADING_PATTERN = /^\s*(#{2,3})\s+([\s\S]+)$/
 function inlineImageUrls(content) {
-  return String(content || '').replace(/\r\n?/g, '\n').split('\n').map(line => line.trim().match(INLINE_IMAGE_PATTERN)?.[2]).filter(Boolean)
+  return normalizeContentLines(content).split('\n').map(line => line.trim().match(INLINE_IMAGE_PATTERN)?.[2]).filter(Boolean)
 }
 function contentHtml(post) {
   // Keep uploads same-origin by default. The API is often bound to 127.0.0.1
@@ -280,14 +286,14 @@ function contentHtml(post) {
   let imageIndex = 0
   const figure = (url, caption) => { imageIndex += 1; return `<figure class="post-image"><img src="${escapeHtml(`${imageBase}${url}`)}" alt="${escapeHtml(caption || `正文配图 ${imageIndex}`)}" loading="lazy">${caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ''}</figure>` }
   const html = []
-  for (const block of String(post.content || post.excerpt || '').replace(/\r\n?/g, '\n').split(/\n{2,}/)) {
-    const lines = block.split('\n').map(line => line.replace(/\s+$/, '')).filter(line => line.trim())
+  for (const block of normalizeContentLines(post.content || post.excerpt || '').split(/\n{2,}/)) {
+    const lines = block.split('\n').map(line => line.trimEnd()).filter(line => line.trim())
     let index = 0
     while (index < lines.length) {
       const line = lines[index]
       const image = line.trim().match(INLINE_IMAGE_PATTERN)
       if (image) { used.add(image[2]); html.push(figure(image[2], image[1].trim())); index += 1; continue }
-      const heading = line.match(/^\s*(#{2,3})\s+(.+)$/)
+      const heading = line.match(HEADING_PATTERN)
       if (heading) { html.push(`<h${heading[1].length}>${renderInlineText(heading[2])}</h${heading[1].length}>`); index += 1; continue }
       const groups = [
         [/^\s*[-•*]\s+/, items => `<ul>${items.map(item => `<li>${renderInlineText(item)}</li>`).join('')}</ul>`],
@@ -301,7 +307,9 @@ function contentHtml(post) {
         html.push(group[1](items)); continue
       }
       const paragraph = []
-      while (index < lines.length && !INLINE_IMAGE_PATTERN.test(lines[index].trim()) && !/^\s*#{2,3}\s+/.test(lines[index]) && !groups.some(([pattern]) => pattern.test(lines[index]))) { paragraph.push(lines[index]); index += 1 }
+      while (index < lines.length && !INLINE_IMAGE_PATTERN.test(lines[index].trim()) && !HEADING_PATTERN.test(lines[index]) && !groups.some(([pattern]) => pattern.test(lines[index]))) { paragraph.push(lines[index]); index += 1 }
+      // Every pass must consume at least one line, whatever the input looks like.
+      if (!paragraph.length) { paragraph.push(lines[index]); index += 1 }
       html.push(`<p>${paragraph.map(renderInlineText).join('<br>')}</p>`)
     }
   }
@@ -309,7 +317,7 @@ function contentHtml(post) {
   return `${html.join('')}${extra}`
 }
 function plainTextFromContent(content) {
-  return String(content || '').replace(/\r\n?/g, '\n').split('\n')
+  return normalizeContentLines(content).split('\n')
     .filter(line => !INLINE_IMAGE_PATTERN.test(line.trim()))
     .map(line => line.replace(/^\s*#{2,3}\s+/, '').replace(/^\s*(?:[-•*]|\d{1,3}[.、)]|>)\s*/, '').replace(/\*\*/g, ''))
     .join(' ').replace(/\s+/g, ' ').trim()
@@ -1073,18 +1081,34 @@ function hasAdminPermission(admin, permission) {
   const [resource, action] = String(permission).split('.')
   return action === 'read' && permissions.includes(`${resource}.manage`)
 }
+// Map every admin route to a permission by its first path segment. Anything
+// not listed here needs the superadmin wildcard, so a new or aliased route can
+// never fall through to a permission every role has.
+const ADMIN_FINANCE_SEGMENTS = new Set(['points', 'point-recharges', 'point-config', 'cdkeys', 'cdkey-redemptions', 'orders', 'tips', 'withdrawals', 'withdrawal-config', 'referrals', 'referral-config', 'referral-commissions', 'checkins', 'checkin-config', 'checkin-leaderboard', 'checkin-stats', 'commerce'])
+const ADMIN_MEMBERSHIP_SEGMENTS = new Set(['member-groups', 'member-plans', 'membership-plans', 'plans', 'memberships'])
+const ADMIN_CONTENT_SEGMENTS = new Set(['reports', 'comment-reports', 'comments', 'posts', 'tags'])
 function adminPermissionFor(pathname, method) {
-  if (pathname === '/api/v1/admin/overview') return 'dashboard.read'
-  if (pathname === '/api/v1/admin/auth/me') return 'dashboard.read'
-  if (pathname.startsWith('/api/v1/admin/auth/') || pathname.startsWith('/api/v1/admin/admins')) return 'system.admins'
-  if (pathname.includes('/settings/smtp') || pathname === '/api/v1/admin/smtp') return 'system.settings'
-  if (pathname === '/api/v1/admin/audit-logs') return 'system.audit'
-  if (pathname.startsWith('/api/v1/admin/notifications')) return 'notifications.manage'
-  if (/\/(points|point-recharges|cdkeys|cdkey-redemptions|orders|tips|withdrawals|withdrawal-config|referral|checkin)/.test(pathname)) return 'finance.manage'
-  if (/^\/api\/v1\/admin\/users(?:\/[^/]+)?$/.test(pathname)) return method === 'GET' ? 'users.read' : 'users.manage'
-  if (/\/(member-groups|member-plans|membership-plans|memberships)/.test(pathname)) return method === 'GET' ? 'membership.read' : 'membership.manage'
-  if (/\/(reports|comment-reports|comments|posts|tags)/.test(pathname)) return method === 'GET' ? 'content.read' : 'content.manage'
-  return 'dashboard.read'
+  const prefix = '/api/v1/admin/'
+  if (!pathname.startsWith(prefix)) return 'system.unmapped'
+  const segments = pathname.slice(prefix.length).split('/')
+  const [first, second, third] = segments
+  const read = method === 'GET' || method === 'HEAD'
+  if (first === 'overview' && segments.length === 1) return 'dashboard.read'
+  if (first === 'auth') return second === 'me' && segments.length === 2 ? 'dashboard.read' : 'system.admins'
+  if (first === 'admins') return 'system.admins'
+  if (first === 'smtp' || (first === 'settings' && second === 'smtp')) return 'system.settings'
+  if (first === 'audit-logs') return 'system.audit'
+  if (first === 'notifications') return 'notifications.manage'
+  if (ADMIN_FINANCE_SEGMENTS.has(first)) return 'finance.manage'
+  if (first === 'users') {
+    if (segments.length <= 2) return read ? 'users.read' : 'users.manage'
+    if (third === 'points' && segments.length === 3) return 'finance.manage'
+    if (third === 'memberships' && segments.length === 3) return read ? 'membership.read' : 'membership.manage'
+    return 'system.unmapped'
+  }
+  if (ADMIN_MEMBERSHIP_SEGMENTS.has(first)) return read ? 'membership.read' : 'membership.manage'
+  if (ADMIN_CONTENT_SEGMENTS.has(first)) return read ? 'content.read' : 'content.manage'
+  return 'system.unmapped'
 }
 function currentUser(req) {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
@@ -1809,7 +1833,10 @@ const server = http.createServer(async (req, res) => {
         const createdAt = nowIso()
         account = { id, username: id, usernameKey: id, email: null, name: '微信用户', avatarUrl: null, passwordHash: '', passwordSalt: '', authVersion: randomBytes(16).toString('hex'), provider: 'wechat', emailVerified: false, status: 'active', createdAt, lastLoginAt: createdAt }
         accounts.set(id, account); profiles.set(id, { id, name: '微信用户', nickname: '微信用户', avatarUrl: null, bio: '', city: '', website: '', createdAt, updatedAt: createdAt })
-      } else account.lastLoginAt = nowIso()
+      } else {
+        if (account.status === 'disabled') return json(res, 403, { message: '账号已被停用，如有疑问请联系客服' })
+        account.lastLoginAt = nowIso()
+      }
       const loggedIn = accountUser(account)
       await persistStore()
       return json(res, 200, { accessToken: signToken(account), user: loggedIn })
@@ -2735,6 +2762,8 @@ const server = http.createServer(async (req, res) => {
         const dimension = decodeURIComponent(adminTagItemMatch[1]); let name
         try { name = decodeURIComponent(adminTagItemMatch[2]) } catch { return json(res, 400, { message: '标签名称无效' }) }
         if (!tags[dimension]) return json(res, 422, { message: '标签维度无效' })
+        // The H5 is built around a single platform; renaming or removing it would empty the feed.
+        if (dimension === 'platform') return json(res, 422, { message: '平台标签固定为 YouTube，不能修改' })
         const index = tags[dimension].indexOf(name)
         if (index < 0) return json(res, 404, { message: '标签不存在' })
         if (req.method === 'DELETE') {

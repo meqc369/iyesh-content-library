@@ -129,7 +129,7 @@
   };
   function loginUrl(returnTo = location.href) {
     const url = new URL('login.html', location.href);
-    try { const target = new URL(returnTo, location.href); if (target.origin === location.origin) url.searchParams.set('return', `${target.pathname}${target.search}${target.hash}`); } catch {}
+    try { const target = new URL(returnTo, location.href); if (target.origin === location.origin) url.searchParams.set('return', `/${target.pathname.replace(/^\/+/, '')}${target.search}${target.hash}`); } catch {}
     return url.pathname + url.search;
   }
   function goLogin(returnTo) { location.href = loginUrl(returnTo); }
@@ -482,19 +482,21 @@
       [/^\s*\d{1,3}[.、)]\s*/, items => `<ol>${items.map(item => `<li>${inlineText(item)}</li>`).join('')}</ol>`],
       [/^\s*>\s?/, items => `<blockquote>${items.map(inlineText).join('<br>')}</blockquote>`]
     ];
-    for (const block of String(content || '').replace(/\r\n?/g, '\n').split(/\n{2,}/)) {
-      const lines = block.split('\n').map(line => line.replace(/\s+$/, '')).filter(line => line.trim());
+    const HEADING = /^\s*(#{2,3})\s+([\s\S]+)$/;
+    for (const block of String(content || '').replace(/\r\n?|[\u2028\u2029\u0085]/g, '\n').split(/\n{2,}/)) {
+      const lines = block.split('\n').map(line => line.trimEnd()).filter(line => line.trim());
       let index = 0;
       while (index < lines.length) {
         const line = lines[index];
         const image = line.trim().match(INLINE_IMAGE);
         if (image) { html.push(`<figure><img src="${escapeHtml(resolve(image[2]))}" alt="${escapeHtml(image[1] || '正文配图')}">${image[1] ? `<figcaption>${escapeHtml(image[1])}</figcaption>` : ''}</figure>`); index += 1; continue; }
-        const heading = line.match(/^\s*(#{2,3})\s+(.+)$/);
+        const heading = line.match(HEADING);
         if (heading) { html.push(`<h${heading[1].length}>${inlineText(heading[2])}</h${heading[1].length}>`); index += 1; continue; }
         const group = groups.find(([pattern]) => pattern.test(line));
         if (group) { const items = []; while (index < lines.length && group[0].test(lines[index]) && !INLINE_IMAGE.test(lines[index].trim())) { items.push(lines[index].replace(group[0], '')); index += 1; } html.push(group[1](items)); continue; }
         const paragraph = [];
-        while (index < lines.length && !INLINE_IMAGE.test(lines[index].trim()) && !/^\s*#{2,3}\s+/.test(lines[index]) && !groups.some(([pattern]) => pattern.test(lines[index]))) { paragraph.push(lines[index]); index += 1; }
+        while (index < lines.length && !INLINE_IMAGE.test(lines[index].trim()) && !HEADING.test(lines[index]) && !groups.some(([pattern]) => pattern.test(lines[index]))) { paragraph.push(lines[index]); index += 1; }
+        if (!paragraph.length) { paragraph.push(lines[index]); index += 1; }
         html.push(`<p>${paragraph.map(inlineText).join('<br>')}</p>`);
       }
     }

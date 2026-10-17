@@ -77,7 +77,7 @@
   function serialize() {
     const parts = [];
     for (const block of state.blocks) {
-      if (block.type === 'text') { const text = block.text.replace(/\s+$/g, ''); if (text.trim()) parts.push(text); }
+      if (block.type === 'text') { const text = block.text.trimEnd(); if (text.trim()) parts.push(text); }
       else if (block.url) parts.push(`![${(block.caption || '').replace(/[\]\n]/g, ' ').trim().slice(0, 120)}](${block.url})`);
     }
     return parts.join('\n\n');
@@ -257,7 +257,7 @@
       if (blockIndex >= 0) {
         const block = state.blocks[blockIndex];
         const caret = Math.min(lastText.end ?? block.text.length, block.text.length);
-        const before = block.text.slice(0, caret).replace(/\s+$/, '');
+        const before = block.text.slice(0, caret).trimEnd();
         const after = block.text.slice(caret).replace(/^\s+/, '');
         block.text = before;
         index = blockIndex;

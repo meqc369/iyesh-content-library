@@ -14,7 +14,8 @@
     try {
       const target = new URL(raw || 'index.html', location.href);
       if (target.origin !== location.origin || /\/login\.html$/.test(target.pathname)) return 'index.html';
-      return `${target.pathname}${target.search}${target.hash}`;
+      // Collapse leading slashes so a path like //evil.com can't become a protocol-relative URL.
+      return `/${target.pathname.replace(/^\/+/, '')}${target.search}${target.hash}`;
     } catch { return 'index.html'; }
   }
   function say(text, type = '') { message.textContent = text; message.className = `auth-message${type ? ` is-${type}` : ''}`; }

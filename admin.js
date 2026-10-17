@@ -23,7 +23,14 @@
     let payload = body;
     if (body !== undefined && !(body instanceof FormData)) { headers['content-type'] = 'application/json'; payload = JSON.stringify(body); }
     let response;
-    try { response = await fetch(`${API}${path}`, { method, headers, body: payload, signal: controller.signal }); }
+    try {
+      // nginx rate-limits the admin API; a GET refused with 429/503 is retried after a short pause.
+      for (let attempt = 0; ; attempt += 1) {
+        response = await fetch(`${API}${path}`, { method, headers, body: payload, signal: controller.signal });
+        if (method !== 'GET' || attempt >= 2 || (response.status !== 429 && response.status !== 503)) break;
+        await new Promise(resolve => setTimeout(resolve, 700 * (attempt + 1)));
+      }
+    }
     catch (error) { throw new App.ApiError(App.friendlyNetworkError(error), 0); }
     finally { clearTimeout(timer); }
     const data = await response.json().catch(() => ({}));
@@ -159,9 +166,19 @@
       return `<h3>${escapeHtml(group)}</h3>${items.map(item => { const count = item.badge && cache.overview ? Number(cache.overview[item.badge] || 0) : 0; return `<a href="#${item.id}" data-view="${item.id}"${current?.id === item.id ? ' aria-current="page"' : ''}>${icon(item.icon)}<span>${escapeHtml(item.title)}</span>${count ? `<span class="count">${count > 99 ? '99+' : count}</span>` : ''}</a>`; }).join('')}`;
     }).join('');
   }
+  // Overview numbers feed both the sidebar badges and the overview page; share one request.
+  let overviewRequest = null, overviewRequestedAt = 0;
+  function fetchOverview(fresh = false) {
+    if (fresh || !overviewRequest || Date.now() - overviewRequestedAt > 3000) {
+      overviewRequestedAt = Date.now();
+      overviewRequest = req('/api/v1/admin/overview');
+      overviewRequest.catch(() => { overviewRequest = null; });
+    }
+    return overviewRequest;
+  }
   async function refreshOverview() {
     if (!can('dashboard.read')) return;
-    try { cache.overview = await req('/api/v1/admin/overview'); renderNav(); } catch {}
+    try { cache.overview = await fetchOverview(true); renderNav(); } catch {}
   }
   async function show(id, { silent = false } = {}) {
     const target = VIEWS.find(item => item.id === id && can(item.perm)) || VIEWS.find(item => can(item.perm));
@@ -179,7 +196,7 @@
 
   /* ---------------- overview ---------------- */
   async function renderOverview() {
-    const data = await req('/api/v1/admin/overview');
+    const data = await fetchOverview();
     cache.overview = data; renderNav();
     const kpi = (label, value, sub = '', href = '', alert = false) => `<div class="kpi${alert ? ' is-alert' : ''}"><span>${escapeHtml(label)}</span><strong>${num(value)}</strong>${sub ? `<small>${escapeHtml(sub)}</small>` : ''}${href ? `<a href="${href}" aria-label="${escapeHtml(label)}"></a>` : ''}</div>`;
     const todo = (label, count, href, show = true) => show ? `<a href="${href}"><span class="n${count ? '' : ' zero'}">${num(count)}</span><span>${escapeHtml(label)}</span>${icon('next')}</a>` : '';
@@ -270,6 +287,11 @@
   async function editPost(post = null) {
     const [tags, plans] = await Promise.all([loadTags(), loadPlans().catch(() => [])]);
     const isNew = !post;
+    const originalPlanIds = (post?.memberPlanIds || []).map(String);
+    // Active plans plus any plan the post is already limited to (even if it has since been archived).
+    const planOptions = plans.filter(plan => plan.status !== 'archived' || originalPlanIds.includes(String(plan.id))).map(plan => [String(plan.id), plan.status === 'archived' ? `${plan.name}（已停售）` : plan.name]);
+    const inlineImages = text => [...String(text || '').matchAll(/!\[[^\]\n]*\]\((\/uploads\/[^)\s]+)\)/g)].map(match => match[1]);
+    const originalInline = inlineImages(post?.content);
     const fields = [
       { name: 'title', label: '标题', required: true, value: post?.title || '', maxLength: 200, wide: true },
       ...(isNew ? [{ name: 'authorName', label: '作者显示名', value: '月入万刀编辑部', maxLength: 40 }] : []),
@@ -277,7 +299,7 @@
       { name: 'skill', label: '技能', type: 'select', value: post?.skill || '', options: [['', '未分类'], ...tags.skill.map(name => [name, name])] },
       { name: 'accessType', label: '谁可以看', type: 'select', value: post?.accessType || 'free', options: [['free', '免费公开'], ['member', '会员专享'], ['paid', '积分解锁']] },
       { name: 'pricePoints', label: `解锁价格（${unit()}）`, type: 'number', min: 0, step: 1, value: post?.pricePoints || '', hint: '仅积分解锁时有效' },
-      { name: 'requiredPlanId', label: '限定会员套餐', type: 'select', value: post?.memberPlanIds?.[0] || '', options: [['', '所有会员'], ...plans.filter(plan => plan.status !== 'archived').map(plan => [plan.id, plan.name])], hint: '仅会员专享时有效' },
+      ...(planOptions.length ? [{ name: 'memberPlanIds', label: '限定会员套餐', type: 'checks', value: originalPlanIds, options: planOptions, hint: '仅会员专享时有效，都不选表示所有会员可看' }] : []),
       { name: 'excerpt', label: '摘要', type: 'textarea', rows: 2, value: post?.excerpt || '', maxLength: 300, wide: true },
       { name: 'content', label: '正文', type: 'textarea', rows: 12, value: post?.content || '', wide: true, hint: '空行分段；## 小标题；- 列表；> 引用；**加粗**' },
       { name: 'digest', label: '设为精华', type: 'checkbox', value: Boolean(post?.digest) }
@@ -288,8 +310,16 @@
       fields, wide: true, submitText: isNew ? '发布' : '保存修改',
       onSubmit: async data => {
         if (data.accessType === 'paid' && !(Number(data.pricePoints) >= 1)) throw new Error('积分解锁需要设置至少 1 的价格');
-        const images = [...String(data.content).matchAll(/!\[[^\]]*\]\((\/uploads\/[^)\s]+)\)/g)].map(match => match[1]);
-        const payload = { title: data.title, excerpt: data.excerpt, content: data.content, project: data.project || '未分类', skill: data.skill || '未分类', accessType: data.accessType, pricePoints: Number(data.pricePoints || 0), requiredPlanId: data.accessType === 'member' ? data.requiredPlanId : '', digest: data.digest, images: images.length ? images : (post?.images || []) };
+        // Images removed from the text are dropped; older posts whose images were never
+        // placed in the text keep them.
+        const legacyImages = (post?.images || []).filter(url => !originalInline.includes(url));
+        const images = [...new Set([...inlineImages(data.content), ...legacyImages])];
+        const payload = { title: data.title, excerpt: data.excerpt, content: data.content, project: data.project || '未分类', skill: data.skill || '未分类', accessType: data.accessType, pricePoints: Number(data.pricePoints || 0), digest: data.digest, images };
+        // Only send the plan list when the admin actually changed it, so editing text never
+        // narrows or widens who can read the post.
+        const selectedPlans = Array.isArray(data.memberPlanIds) ? data.memberPlanIds : originalPlanIds;
+        const plansChanged = selectedPlans.length !== originalPlanIds.length || selectedPlans.some(planId => !originalPlanIds.includes(planId));
+        if (data.accessType === 'member' && (isNew || plansChanged)) payload.memberPlanIds = selectedPlans;
         if (isNew) await req('/api/v1/admin/posts', { method: 'POST', body: { ...payload, authorName: data.authorName, platform: 'YouTube' } });
         else await req(`/api/v1/admin/posts/${encodeURIComponent(post.id)}`, { method: 'PATCH', body: payload });
         toast(isNew ? '内容已发布' : '修改已保存', 'success');
@@ -316,7 +346,7 @@
         const url = await upload(file);
         const position = area.selectionStart ?? area.value.length;
         const insert = `\n\n![](${url})\n\n`;
-        area.value = `${area.value.slice(0, position).replace(/\s+$/, '')}${insert}${area.value.slice(position).replace(/^\s+/, '')}`;
+        area.value = `${area.value.slice(0, position).trimEnd()}${insert}${area.value.slice(position).trimStart()}`;
         toast('图片已插入', 'success');
       } catch (error) { toast(error.message, 'error'); } finally { busy(button, false); }
     });
@@ -459,7 +489,7 @@
     view.innerHTML = [
       `<div class="two-col wide-left">${card({ title: '生成兑换码', hint: '兑换码只在生成时完整显示一次，请立即复制', className: 'form-card', body: `<form class="card-body" id="cdkeyForm" novalidate><div class="form-row cols-2">${fieldHtml({ name: 'points', label: `面额（${unit()}）`, type: 'number', min: 1, step: 1, value: 1000, required: true })}${fieldHtml({ name: 'quantity', label: '数量', type: 'number', min: 1, max: 500, value: 1, required: true })}${fieldHtml({ name: 'expiresAt', label: '过期时间', type: 'datetime-local', hint: '留空则长期有效' })}${fieldHtml({ name: 'note', label: '备注', placeholder: '例如：10月微信转账批次', maxLength: 200 })}</div><div class="form-actions"><button class="btn btn--primary" type="submit">${icon('gift')}生成兑换码</button></div></form>` })}
       ${card({ title: `手动充值${unit()}`, body: `<div class="card-body"><p class="hint">适合补发或线下收款后直接到账。每笔充值都会记录操作人，不能删除。</p><div class="form-actions" style="margin-top:14px"><button class="btn btn--money" type="button" data-quick="recharge">${icon('coin')}充值${unit()}</button></div></div>` })}</div>`,
-      card({ title: '兑换码', hint: `${num(keyItems.length)} 个`, body: `<div class="toolbar"><div class="status-tabs" role="group">${[['', '全部'], ['unused', '未使用'], ['redeemed', '已兑换'], ['revoked', '已停用'], ['expired', '已过期']].map(([value, label]) => `<button type="button" data-cdkey-status="${value}" aria-pressed="${cdkeyState.status === value}">${label}</button>`).join('')}</div></div>${tableHtml(['兑换码', `>${unit()}`, '状态', '兑换用户', '有效期', '生成时间', '>操作'], keyRows)}` }),
+      card({ title: '兑换码', hint: `${num(keyItems.length)} 个`, body: `<div class="toolbar"><div class="status-tabs" role="group">${[['', '全部'], ['unused', '未使用'], ['redeemed', '已兑换'], ['disabled', '已停用'], ['expired', '已过期']].map(([value, label]) => `<button type="button" data-cdkey-status="${value}" aria-pressed="${cdkeyState.status === value}">${label}</button>`).join('')}</div></div>${tableHtml(['兑换码', `>${unit()}`, '状态', '兑换用户', '有效期', '生成时间', '>操作'], keyRows)}` }),
       card({ title: `${unit()}充值记录`, hint: '只读，不可删除', body: tableHtml(['用户', '>变动', '>余额', '来源', '备注', '时间'], rechargeRows) })
     ].join('');
   }
@@ -553,7 +583,7 @@
     const tags = await loadTags(true);
     const manage = can('content.manage');
     const board = (dimension, title, hint) => card({ title, hint, body: `<div class="card-body"><div class="tag-list">${(tags[dimension] || []).map(name => `<span class="chip">${escapeHtml(name)}${manage ? `<button type="button" data-tag-rename="${escapeHtml(name)}" data-dimension="${dimension}" aria-label="重命名 ${escapeHtml(name)}">${icon('edit')}</button><button type="button" data-tag-delete="${escapeHtml(name)}" data-dimension="${dimension}" aria-label="删除 ${escapeHtml(name)}">${icon('x')}</button>` : ''}</span>`).join('') || '<span class="hint">暂无</span>'}</div>${manage ? `<form class="input-group" data-tag-add="${dimension}" style="margin-top:16px"><input class="input" name="name" maxlength="40" placeholder="新增${escapeHtml(title)}" required><button class="btn" type="submit">添加</button></form>` : ''}</div>` });
-    view.innerHTML = `<p class="view-intro">方向和技能会出现在发现页筛选、投稿分类里。重命名会同步更新已有内容。</p><div class="tag-board">${board('project', '方向', '项目 / 赛道')}${board('skill', '技能', '工具 / 方法')}${board('platform', '平台', '内容来源平台')}</div>`;
+    view.innerHTML = `<p class="view-intro">方向和技能会出现在发现页筛选、投稿分类里。重命名会同步更新已有内容。</p><div class="tag-board">${board('project', '方向', '项目 / 赛道')}${board('skill', '技能', '工具 / 方法')}</div>`;
   }
 
   /* ---------------- admins ---------------- */

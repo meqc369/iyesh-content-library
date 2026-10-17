@@ -715,7 +715,8 @@ body.modal-open { overflow: hidden; }
 .access-option .radio { grid-row: span 2; width: 20px; height: 20px; margin-top: 2px; border: 2px solid var(--line-strong); border-radius: 50%; transition: border .15s; }
 .access-option strong { font-size: 15px; }
 .access-option span.desc { color: var(--muted); font-size: 13px; }
-.access-option:has(input:checked), .access-option.is-checked { border-color: var(--ink); background: var(--surface-2); }
+.access-option.is-checked { border-color: var(--ink); background: var(--surface-2); }
+.access-option:has(input:checked) { border-color: var(--ink); background: var(--surface-2); }
 .access-option.is-checked .radio { border: 6px solid var(--ink); }
 .access-option input:focus-visible ~ .radio { outline: 3px solid rgba(44, 98, 219, .45); outline-offset: 2px; }
 .access-extra { margin-top: 12px; padding: 14px; border-radius: 14px; background: var(--surface-2); display: grid; gap: 10px; }

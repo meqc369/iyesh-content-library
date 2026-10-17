@@ -14,7 +14,7 @@
   const returnTo = (() => {
     const raw = new URLSearchParams(location.search).get('return');
     if (!raw) return '';
-    try { const url = new URL(raw, location.href); return url.origin === location.origin ? url.pathname + url.search : ''; } catch { return ''; }
+    try { const url = new URL(raw, location.href); return url.origin === location.origin ? `/${url.pathname.replace(/^\/+/, '')}${url.search}` : ''; } catch { return ''; }
   })();
 
   function renderStatus() {
