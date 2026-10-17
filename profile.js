@@ -3,6 +3,7 @@
   'use strict';
   const App = window.App;
   const { api, icon, escapeHtml, toast, relativeTime, dateText, num, accessInfo, avatarHtml, session } = App;
+  const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
 
   const TABS = ['posts', 'favorites', 'messages', 'wallet', 'invite', 'filters'];
   const LEGACY = { overview: 'wallet', activity: 'posts', saved: 'filters', notifications: 'messages' };
@@ -278,7 +279,10 @@
     document.querySelectorAll('[data-tab]').forEach(tab => { const active = tab.dataset.tab === name; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; if (active && tab.scrollIntoView && push) tab.scrollIntoView({ inline: 'center', block: 'nearest' }); });
     document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
     document.querySelectorAll('.tabbar [data-nav]').forEach(link => { const target = name === 'messages' ? 'messages' : 'profile'; if (link.dataset.nav === target) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); });
-    if (push && location.hash.slice(1) !== name) history.replaceState(null, '', `#${name}`);
+    // WeChat may run its external-link safety check again when a hash URL is
+    // changed inside its webview. Keep the selected tab in memory there so
+    // switching tabs does not look like opening a new external page.
+    if (push && !isWeChat && location.hash.slice(1) !== name) history.replaceState(null, '', `#${name}`);
     if (!loaded.has(name)) { loaded.add(name); loaders[name]?.(); }
   }
 
