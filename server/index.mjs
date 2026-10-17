@@ -2,7 +2,7 @@ import http from 'node:http'
 import { createHmac, createHash, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto'
 import nodemailer from 'nodemailer'
 import sharp from 'sharp'
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { URL } from 'node:url'
@@ -1873,7 +1873,10 @@ const server = http.createServer(async (req, res) => {
         if (!extension) return json(res, 415, { message: '图片格式与文件内容不一致' })
         accepted.push({ ...file, extension })
       }
-      await mkdir(UPLOADS_DIR, { recursive: true })
+      await mkdir(UPLOADS_DIR, { recursive: true, mode: 0o755 })
+      // Nginx serves /uploads/ directly from this directory. Keep the
+      // directory traversable even when the service umask created it as 750.
+      await chmod(UPLOADS_DIR, 0o755)
       const items = []
       for (const file of accepted) {
         let compressed

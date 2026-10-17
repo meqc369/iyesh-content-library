@@ -190,6 +190,12 @@ say "更新 API"
 cp "${SRC}/server/index.mjs" "${API_DIR}/index.mjs.new"
 chown --reference="${API_DIR}/index.mjs" "${API_DIR}/index.mjs.new" 2>/dev/null || true
 mv "${API_DIR}/index.mjs.new" "${API_DIR}/index.mjs"
+# Nginx serves uploads directly via an alias. Keep the directory traversable
+# for its worker user while leaving uploaded files readable but not writable.
+if [ -d "${API_DIR}/uploads" ]; then
+  chmod 755 "${API_DIR}/uploads"
+  find "${API_DIR}/uploads" -type f -exec chmod 644 {} +
+fi
 for f in import-content.mjs smoke.mjs production-smoke.mjs; do [ -f "${SRC}/server/${f}" ] && cp "${SRC}/server/${f}" "${API_DIR}/${f}"; done
 restart_api
 if ! wait_healthy; then
