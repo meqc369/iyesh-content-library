@@ -45,8 +45,23 @@ find_api() {
 detect_manager() {
   find_api
   [ -n "$API_PID" ] || die "没有找到监听 ${API_PORT} 端口的 API 进程，请先确认后端在运行"
-  API_DIR="$(readlink -f "/proc/${API_PID}/cwd")"
-  [ -f "${API_DIR}/index.mjs" ] || die "API 进程的工作目录 ${API_DIR} 里没有 index.mjs，请手动确认后端目录"
+  # Work out which index.mjs the process runs: pm2's exec path, then the script
+  # argument on the command line, then the working directory.
+  local cwd script arg
+  cwd="$(readlink -f "/proc/${API_PID}/cwd")"
+  script="$(tr '\0' '\n' < "/proc/${API_PID}/environ" 2>/dev/null | grep '^pm_exec_path=' | head -n1 | cut -d= -f2- || true)"
+  if [ -z "$script" ]; then
+    while IFS= read -r arg; do
+      case "$arg" in *index.mjs) script="$arg"; break ;; esac
+    done < <(tr '\0' '\n' < "/proc/${API_PID}/cmdline")
+  fi
+  if [ -n "$script" ]; then
+    case "$script" in /*) ;; *) script="${cwd}/${script}" ;; esac
+    API_DIR="$(dirname "$(readlink -f "$script")")"
+  else
+    API_DIR="$cwd"
+  fi
+  [ -f "${API_DIR}/index.mjs" ] || die "没有在 ${API_DIR} 找到 API 程序 index.mjs，请手动确认后端目录"
   if tr '\0' '\n' < "/proc/${API_PID}/environ" 2>/dev/null | grep -q '^pm_id='; then
     MANAGER="pm2"
     PM2_ID="$(tr '\0' '\n' < "/proc/${API_PID}/environ" | grep '^pm_id=' | head -n1 | cut -d= -f2)"
