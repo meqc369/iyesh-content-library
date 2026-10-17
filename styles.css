@@ -807,10 +807,15 @@ body.keyboard-open .publish-bar { display: none; }
 .checkin-strip .copy { min-width: 0; flex: 1; color: var(--ink-2); font-size: 14px; }
 .checkin-strip .btn { flex: none; }
 @media (max-width: 759px) {
-  .checkin-strip { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "streak week" "copy btn"; gap: 12px 14px; }
+  .checkin-strip { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "streak week" "copy copy" "btn btn"; gap: 10px 14px; }
   .checkin-strip .week { justify-self: end; gap: 4px; }
   .checkin-strip .week i { width: 24px; height: 24px; }
-  .checkin-strip .copy { font-size: 13px; }
+  .checkin-strip .copy { min-width: 0; max-width: 100%; font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+  .checkin-strip > .btn { justify-self: start; min-width: 120px; }
+}
+@media (max-width: 380px) {
+  .checkin-strip { grid-template-columns: minmax(0, 1fr); grid-template-areas: "streak" "week" "copy" "btn"; }
+  .checkin-strip .week { justify-self: start; }
 }
 .profile-tabs { position: sticky; top: var(--header-h); z-index: 20; margin-top: 24px; background: rgba(244, 245, 241, .95); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
 .profile-tabs .container { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
