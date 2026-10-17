@@ -1,0 +1,12 @@
+node_modules/
+uniapp/node_modules/
+uniapp/dist/
+.DS_Store
+server/data/store.json
+server/uploads/
+uniapp/.env
+uniapp/.env.*
+!uniapp/.env.example
+server/.env
+server/.env.*
+!server/.env.example

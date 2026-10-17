@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>内容管理 · 月入万刀</title>
+  <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .admin-shell{max-width:1100px}
+    .admin-toolbar,.admin-grid,.admin-form,.admin-list,.admin-workbench{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px}
+    .admin-toolbar{display:flex;gap:10px;align-items:center}.admin-toolbar input,.admin-form input,.admin-form textarea,.admin-form select,.admin-subform input,.admin-subform textarea,.admin-subform select{border:1px solid var(--line);border-radius:6px;padding:9px;font:inherit}.admin-toolbar input{width:220px}.admin-toolbar button,.admin-form button,.admin-subform button{background:var(--brand);color:#fff;border:0;border-radius:6px;padding:9px 14px;cursor:pointer}.admin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.admin-stat{background:#f7f8fa;border-radius:8px;padding:14px}.admin-stat strong{display:block;font-size:24px}.admin-stat span{color:var(--muted);font-size:12px}.admin-form{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.admin-form h2,.admin-list h2,.admin-workbench h2{grid-column:1/-1;margin:0 0 4px;font-size:18px}.admin-form textarea,.admin-form .form-wide{min-height:80px;grid-column:1/-1}.admin-form button{width:max-content}.admin-list table{width:100%;border-collapse:collapse}.admin-list th,.admin-list td{text-align:left;border-top:1px solid #f1f3f5;padding:10px 6px;font-size:13px}.admin-list td:last-child{white-space:nowrap}.admin-list button{border:1px solid var(--line);background:#fff;border-radius:5px;padding:5px 9px;cursor:pointer}.admin-message{color:var(--muted);font-size:13px}
+    .admin-workbench{display:grid;grid-template-columns:1fr 1fr;gap:18px}.admin-workbench>h2,.admin-workbench>p{grid-column:1/-1}.admin-workbench>h2{margin-bottom:0}.admin-workbench>p{margin:0;color:var(--muted);font-size:13px}.admin-subsection{border:1px solid #edf0f4;border-radius:10px;padding:16px;background:#fcfdff}.admin-subsection h3{margin:0 0 10px;font-size:15px}.admin-subsection p{margin:0 0 12px;color:var(--muted);font-size:12px}.admin-subform{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.admin-subform label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#66707d}.admin-subform .form-wide{grid-column:1/-1}.admin-subform button{width:max-content}.admin-helper{color:var(--muted);font-size:12px;line-height:1.6;grid-column:1/-1;margin:0}.permission-options{display:flex;flex-wrap:wrap;gap:8px;grid-column:1/-1}.permission-options label{display:flex;flex-direction:row;align-items:center;gap:5px;border:1px solid #e7ebf1;background:#f8fafc;border-radius:999px;padding:6px 9px;color:#4d5967}.permission-options input{accent-color:var(--brand)}.admin-badge{display:inline-flex;padding:3px 7px;border-radius:999px;background:#eef3ff;color:var(--brand);font-size:11px}.admin-badge.muted{background:#f2f3f5;color:#79818c}.admin-badge.success{background:#eaf8ef;color:#378b5b}.admin-badge.warning{background:#fff4d9;color:#8a5a00}.admin-actions{display:flex;gap:6px;flex-wrap:wrap}.admin-actions button[data-danger]{color:#b54444}.readonly-note{display:inline-flex;align-items:center;gap:6px;background:#f7f8fa;border-radius:6px;padding:7px 10px;color:#697381;font-size:12px}.admin-filter{display:flex;align-items:center;gap:8px;grid-column:1/-1;margin-bottom:8px}.admin-filter input{width:100px}.admin-filter button{margin-left:auto}.admin-empty{color:var(--muted);text-align:center}.admin-list--scroll{max-height:420px;overflow:auto}
+    .admin-message-form{display:grid;grid-template-columns:180px 1fr;gap:12px 14px;align-items:start}.admin-message-form label{display:flex;flex-direction:column;gap:6px;color:#66707d;font-size:12px}.admin-message-form .form-wide{grid-column:1/-1}.admin-message-form textarea{min-height:130px;resize:vertical}.admin-message-form button{grid-column:1/-1;width:max-content}.admin-message-table{max-height:460px;overflow:auto}.admin-message-table table{min-width:760px}
+    @media(max-width:800px){.admin-workbench{grid-template-columns:1fr}.admin-subform{grid-template-columns:1fr}.admin-grid,.admin-form{grid-template-columns:1fr}.admin-list{overflow:auto}.admin-list table{min-width:720px}}
+    @media(max-width:600px){.admin-message-form{grid-template-columns:1fr}.admin-message-form .form-wide,.admin-message-form button{grid-column:auto}}
+
+  /* Admin console visual system: a dark work rail and calm data surfaces keep heavy
+     operations scannable without turning every section into a floating card. */
+  :root{--admin-ink:#14213d;--admin-muted:#6f7c91;--admin-navy:#14233f;--admin-navy-2:#1d3155;--admin-blue:#5674ed;--admin-blue-soft:#edf1ff;--admin-bg:#f3f6fb;--admin-border:#e3e8f1;--admin-green:#2f956c;--admin-amber:#c7862b}
+  body.admin-page{background:var(--admin-bg);color:var(--admin-ink)}
+  body.admin-page .topbar{height:72px;padding:0 42px;background:#fff;border-bottom:1px solid #e5eaf2;box-shadow:0 1px 0 rgb(20 33 61 / 3%)}
+  body.admin-page .brand{color:var(--admin-ink);letter-spacing:-.2px}
+  body.admin-page .brand-logo{width:34px;height:34px}
+  body.admin-page .topbar nav{gap:22px}
+  body.admin-page .topbar nav a{font-size:13px}
+  .admin-shell{width:min(1440px,100%);max-width:none;padding:34px 42px 76px}
+  .admin-shell .hero{align-items:flex-start;margin:0 0 20px;padding:2px 2px 0}
+  .admin-shell .hero h1{color:var(--admin-ink);font-size:32px;line-height:1.15;letter-spacing:-.9px;margin:0 0 8px}
+  .admin-shell .hero .sub{color:var(--admin-muted);font-size:13px}
+  .admin-toolbar{display:flex;align-items:center;gap:10px;min-height:58px;margin:0 0 22px;padding:10px 14px;background:#fff;border:1px solid var(--admin-border);border-radius:14px;box-shadow:0 8px 20px rgb(31 55 104 / 4%)}
+  .admin-toolbar .readonly-note{background:#f5f7fb;color:#65748b;border-radius:8px;padding:8px 11px}
+  .admin-toolbar #message{margin-left:auto;min-width:150px;text-align:right}
+  .admin-toolbar button{border:1px solid var(--admin-border);background:#fff;color:#435576;border-radius:8px;padding:8px 13px;font-size:12px}
+  .admin-toolbar #loadBtn{border-color:#cbd6ff;background:var(--admin-blue-soft);color:#3e5bd5;font-weight:650}
+  .admin-toolbar #logoutBtn{color:#8b5860}
+  .admin-workspace{display:grid;grid-template-columns:228px minmax(0,1fr);gap:26px;align-items:start}
+  .admin-sidebar{position:sticky;top:22px;display:flex;flex-direction:column;min-height:560px;padding:18px 12px 14px;background:linear-gradient(160deg,var(--admin-navy),#192f55);border-radius:18px;box-shadow:0 15px 34px rgb(20 39 76 / 16%);overflow:hidden}
+  .admin-sidebar:after{content:"";position:absolute;width:170px;height:170px;right:-88px;top:-70px;border-radius:50%;background:rgb(107 135 239 / 18%);pointer-events:none}
+  .admin-sidebar-head{position:relative;z-index:1;display:flex;align-items:center;gap:11px;padding:4px 8px 22px;color:#f8fbff}
+  .admin-sidebar-logo{width:36px;height:36px;border-radius:11px;background:#fff;object-fit:contain;padding:5px;flex:none}
+  .admin-sidebar-head strong{display:block;font-size:14px;letter-spacing:.1px}
+  .admin-sidebar-head small{display:block;margin-top:3px;color:#aebbd2;font-size:10px}
+  .admin-shell .admin-tabs{position:relative;z-index:1;display:flex;flex-direction:column;align-items:stretch;gap:4px;margin:0;padding:0;border:0;border-radius:0;background:transparent;overflow:visible}
+  .admin-shell .admin-tab{display:flex;align-items:center;gap:10px;width:100%;min-height:43px;padding:0 12px;border:1px solid transparent;border-radius:10px;color:#b7c4da;font-size:13px;text-align:left;transition:background .18s,color .18s,transform .18s}
+  .admin-shell .admin-tab:before{content:"";width:6px;height:6px;border:1px solid currentColor;border-radius:50%;opacity:.7;transition:background .18s,border-color .18s}
+  .admin-shell .admin-tab:hover{background:rgb(255 255 255 / 8%);color:#fff;transform:translateX(2px)}
+  .admin-shell .admin-tab.is-active{background:linear-gradient(90deg,#5d7af1,#6b82ef);color:#fff;box-shadow:0 8px 18px rgb(5 14 36 / 24%);font-weight:650}
+  .admin-shell .admin-tab.is-active:before{background:#fff;border-color:#fff}
+  .admin-sidebar-foot{position:relative;z-index:1;display:flex;align-items:center;gap:7px;margin-top:auto;padding:17px 10px 2px;border-top:1px solid rgb(255 255 255 / 11%);color:#9dafc8;font-size:11px}
+  .admin-online-dot{width:7px;height:7px;border-radius:50%;background:#52ca91;box-shadow:0 0 0 4px rgb(82 202 145 / 13%)}
+  .admin-panel-stack{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0}
+  .admin-panel-stack>[data-admin-panel]{min-width:0;margin:0}
+  .admin-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;padding:0;background:none;border:0}
+  .admin-stat{position:relative;min-height:102px;padding:17px 17px 14px;background:#fff;border:1px solid var(--admin-border);border-radius:14px;box-shadow:0 8px 22px rgb(33 56 105 / 5%);overflow:hidden}
+  .admin-stat:after{content:"";position:absolute;right:-19px;bottom:-22px;width:78px;height:78px;border-radius:50%;background:var(--admin-blue-soft)}
+  .admin-stat strong{position:relative;z-index:1;display:block;color:var(--admin-ink);font-size:25px;line-height:1.12;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+  .admin-stat span{position:relative;z-index:1;display:block;margin-top:8px;color:var(--admin-muted);font-size:11px}
+  .admin-list,.admin-form,.admin-workbench{background:#fff;border:1px solid var(--admin-border);border-radius:15px;padding:22px 24px;box-shadow:0 8px 24px rgb(33 56 105 / 4%)}
+  .admin-list h2,.admin-form h2,.admin-workbench>h2{margin:0 0 16px;color:var(--admin-ink);font-size:17px;letter-spacing:-.25px}
+  .admin-list>h2:after,.admin-form>h2:after{content:"";display:block;width:24px;height:3px;margin-top:9px;border-radius:2px;background:var(--admin-blue)}
+  .admin-list>p,.admin-workbench>p{color:var(--admin-muted);font-size:12px}
+  .admin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 14px;align-items:start}
+  .admin-form h2,.admin-form>.admin-helper,.admin-form textarea,.admin-form .form-wide,.admin-form .permission-options{grid-column:1/-1}
+  .admin-form input,.admin-form textarea,.admin-form select,.admin-subform input,.admin-subform textarea,.admin-subform select{width:100%;min-height:42px;padding:10px 11px;border:1px solid #dce3ef;border-radius:9px;background:#fbfcff;color:var(--admin-ink);font-size:13px;transition:border-color .18s,box-shadow .18s,background .18s}
+  .admin-form input:focus,.admin-form textarea:focus,.admin-form select:focus,.admin-subform input:focus,.admin-subform textarea:focus,.admin-subform select:focus{outline:0;border-color:#8ca5ff;background:#fff;box-shadow:0 0 0 3px rgb(86 116 237 / 13%)}
+  .admin-form textarea{min-height:100px;resize:vertical}
+  .admin-form>label{display:flex;align-items:center;gap:8px;color:var(--admin-muted);font-size:12px}
+  .admin-form>label input{width:auto;min-height:0;accent-color:var(--admin-blue)}
+  .admin-form button,.admin-subform button{width:max-content;min-height:40px;border:0;border-radius:9px;background:linear-gradient(135deg,#5674ed,#405dd6);color:#fff;padding:0 16px;font-size:12px;font-weight:650;box-shadow:0 7px 14px rgb(67 91 213 / 18%);cursor:pointer}
+  .admin-form button:hover,.admin-subform button:hover{filter:brightness(1.04);transform:translateY(-1px)}
+  .admin-workbench{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;background:transparent;border:0;padding:0;box-shadow:none}
+  .admin-workbench>h2,.admin-workbench>p{grid-column:1/-1;margin:0}
+  .admin-workbench>h2{font-size:20px;padding:3px 2px 0}
+  .admin-workbench>p{margin-top:-7px;color:var(--admin-muted);font-size:12px}
+  .admin-subsection{min-width:0;padding:19px 20px;background:#fff;border:1px solid var(--admin-border);border-radius:14px;box-shadow:0 8px 20px rgb(33 56 105 / 4%)}
+  .admin-subsection h3{margin:0 0 5px;color:var(--admin-ink);font-size:14px;letter-spacing:-.1px}
+  .admin-subsection p{margin:0 0 14px;color:var(--admin-muted);font-size:11px;line-height:1.55}
+  .admin-subform{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 12px}
+  .admin-subform label{display:flex;flex-direction:column;gap:6px;color:#61708a;font-size:11px;line-height:1.3}
+  .admin-subform .form-wide,.admin-subform button,.admin-subform .admin-helper{grid-column:1/-1}
+  .admin-subform button{margin-top:2px}
+  .admin-message{color:var(--admin-muted);font-size:11px}
+  .readonly-note{background:#f6f8fb;color:#6b7890;border-radius:7px;padding:6px 9px;font-size:11px}
+  .admin-list table{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
+  .admin-list th{padding:10px 10px;border-bottom:1px solid #e6ebf3;background:#f8faff;color:#7a879b;font-size:10px;font-weight:650;letter-spacing:.2px;text-align:left;white-space:nowrap}
+  .admin-list th:first-child{border-radius:8px 0 0 8px}.admin-list th:last-child{border-radius:0 8px 8px 0}
+  .admin-list td{padding:12px 10px;border-bottom:1px solid #edf1f6;color:#40516d;font-size:12px;vertical-align:top}
+  .admin-list tbody tr:last-child td{border-bottom:0}
+  .admin-list tbody tr:hover td{background:#fbfcff}
+  .admin-list td code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:#637291}
+  .admin-list button{border:1px solid #d6dfef;background:#fff;color:#4b6297;border-radius:7px;padding:6px 9px;font-size:11px;cursor:pointer}
+  .admin-list button:hover{border-color:#9ab0f8;background:#f5f7ff;color:#3e5bd5}
+  .admin-actions{gap:6px}
+  .admin-badge{padding:4px 8px;border-radius:6px;background:#edf1ff;color:#4c64cf;font-size:10px;font-weight:650}
+  .admin-badge.success{background:#e8f7ef;color:#2b8a61}.admin-badge.warning{background:#fff4dd;color:#a36b1c}.admin-badge.muted{background:#f0f2f6;color:#7b8798}
+  .admin-filter{display:flex;align-items:center;gap:9px;margin:0 0 13px}
+  .admin-filter h2{margin:0;margin-right:auto}
+  .admin-filter input{min-height:34px;padding:7px 9px;border:1px solid #dce3ef;border-radius:7px;min-width:130px}
+  .admin-filter button{margin-left:0}
+  .permission-options{display:flex;flex-wrap:wrap;gap:7px}
+  .permission-options label{display:flex;flex-direction:row;align-items:center;gap:6px;padding:7px 9px;border:1px solid #e2e7f0;border-radius:7px;background:#f8faff;color:#61708a;font-size:11px}
+  .permission-options input{accent-color:var(--admin-blue)}
+  .admin-message-table,.admin-list--scroll{overflow:auto}
+  .admin-message-table table,.admin-list--scroll table{min-width:680px}
+  .admin-empty{padding:25px!important;text-align:center;color:#9aa6b8!important}
+  .admin-dialog{width:min(560px,calc(100vw - 28px));max-height:calc(100vh - 40px);padding:24px;border:1px solid var(--admin-border);border-radius:16px;color:var(--admin-ink);box-shadow:0 24px 70px rgb(20 33 61 / 24%)}
+  .admin-dialog::backdrop{background:rgb(20 33 61 / 38%);backdrop-filter:blur(2px)}
+  .admin-dialog-close{float:right;width:30px;height:30px;border:0!important;background:transparent!important;color:var(--admin-muted)!important;font-size:22px;line-height:1;padding:0!important}
+  .admin-detail-grid{display:grid;grid-template-columns:90px minmax(0,1fr);gap:10px 14px;margin:18px 0 20px}
+  .admin-detail-grid dt{color:var(--admin-muted);font-size:12px}.admin-detail-grid dd{margin:0;min-width:0;color:var(--admin-ink);font-size:13px;overflow-wrap:anywhere}
+  .withdrawal-qr{border-top:1px solid var(--admin-border);padding-top:16px}.withdrawal-qr h3{margin:0 0 10px;font-size:14px}.withdrawal-qr img{display:block;width:min(220px,100%);max-height:280px;object-fit:contain;border:1px solid var(--admin-border);border-radius:10px;background:#fff;padding:6px}
+  .admin-dialog{width:min(560px,calc(100vw - 32px));border:0;border-radius:18px;padding:24px;background:#fff;color:var(--admin-ink);box-shadow:0 24px 80px rgb(15 30 60 / 24%)}
+  .admin-dialog::backdrop{background:rgb(15 25 45 / 45%);backdrop-filter:blur(2px)}
+  .admin-dialog>form{position:absolute;right:12px;top:10px}
+  .admin-dialog-close{border:0;background:transparent;color:#7b8799;font-size:26px;line-height:1;cursor:pointer}
+  .admin-dialog h2{margin:0 0 18px;font-size:20px}
+  .admin-detail-grid{display:grid;grid-template-columns:110px 1fr;gap:10px 14px;margin:0;padding:0;font-size:13px}
+  .admin-detail-grid dt{color:#7c8899}.admin-detail-grid dd{margin:0;color:#253a60;word-break:break-word}
+  .withdrawal-qr{margin-top:20px;padding-top:16px;border-top:1px solid #edf0f4}.withdrawal-qr h3{margin:0 0 10px;font-size:14px}.withdrawal-qr img{display:block;width:min(260px,100%);max-height:320px;object-fit:contain;border:1px solid #edf0f4;border-radius:10px;background:#fafbfc}
+  .referral-config-note{grid-column:1/-1;margin:0;color:var(--admin-muted);font-size:12px;line-height:1.6}
+  .referral-config-note strong{color:var(--admin-ink)}
+  .referral-config-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px;align-items:end}
+  .referral-config-form label{display:flex;flex-direction:column;gap:6px;color:#61708a;font-size:11px;line-height:1.3}
+  .referral-config-form input{width:100%;min-height:42px;padding:10px 11px;border:1px solid #dce3ef;border-radius:9px;background:#fbfcff;color:var(--admin-ink);font-size:13px}
+  .referral-config-form input:focus{outline:0;border-color:#8ca5ff;background:#fff;box-shadow:0 0 0 3px rgb(86 116 237 / 13%)}
+  .referral-config-form input[readonly]{background:#f5f7fb;color:#7b8799}
+  .referral-config-form button{width:max-content;min-height:40px;border:0;border-radius:9px;background:linear-gradient(135deg,#5674ed,#405dd6);color:#fff;padding:0 16px;font-size:12px;font-weight:650;box-shadow:0 7px 14px rgb(67 91 213 / 18%);cursor:pointer}
+  .referral-config-form button:hover{filter:brightness(1.04);transform:translateY(-1px)}
+  .referral-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:11px;padding:0;background:none;border:0}
+  .referral-summary .admin-stat{min-height:88px}
+  .referral-filter{display:flex;align-items:center;gap:9px;margin:0 0 13px;flex-wrap:wrap}
+  .referral-filter h2{margin:0 auto 0 0}
+  .referral-filter input,.referral-filter select{min-height:34px;padding:7px 9px;border:1px solid #dce3ef;border-radius:7px;background:#fff;color:var(--admin-ink);font:inherit;font-size:12px}
+  .referral-filter button{border:1px solid #d6dfef;background:#fff;color:#4b6297;border-radius:7px;padding:6px 9px;font-size:11px;cursor:pointer}
+  .referral-filter button:hover{border-color:#9ab0f8;background:#f5f7ff;color:#3e5bd5}
+  .referral-table{overflow:auto}
+  .referral-table table{min-width:760px}
+  .referral-level{display:inline-flex;align-items:center;padding:3px 7px;border-radius:6px;background:#edf1ff;color:#4c64cf;font-size:10px;font-weight:650}
+  .referral-level.second{background:#f5efff;color:#7655a7}
+  .referral-amount{color:#2b8a61;font-weight:650;white-space:nowrap}
+  .referral-amount.pending{color:#a36b1c}
+  .referral-amount.rejected{color:#a64d4d}
+  .checkin-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;padding:0;background:none;border:0}
+  .checkin-config-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px 14px;align-items:end}
+  .checkin-config-form label{display:flex;flex-direction:column;gap:6px;color:#61708a;font-size:11px;line-height:1.3}
+  .checkin-config-form input,.checkin-config-form select{width:100%;min-height:42px;padding:10px 11px;border:1px solid #dce3ef;border-radius:9px;background:#fbfcff;color:var(--admin-ink);font-size:13px}
+  .checkin-config-form input:focus,.checkin-config-form select:focus{outline:0;border-color:#8ca5ff;background:#fff;box-shadow:0 0 0 3px rgb(86 116 237 / 13%)}
+  .checkin-config-form .checkin-toggle{display:flex;flex-direction:row;align-items:center;gap:8px;min-height:42px;color:var(--admin-ink);font-size:13px;font-weight:650}
+  .checkin-config-form .checkin-toggle input{width:auto;min-height:0;accent-color:var(--admin-blue)}
+  .checkin-config-form button{width:max-content;min-height:40px;border:0;border-radius:9px;background:linear-gradient(135deg,#5674ed,#405dd6);color:#fff;padding:0 16px;font-size:12px;font-weight:650;box-shadow:0 7px 14px rgb(67 91 213 / 18%);cursor:pointer}
+  .checkin-config-form button:hover{filter:brightness(1.04);transform:translateY(-1px)}
+  .checkin-config-wide{grid-column:1/-1}
+  .checkin-rewards{display:grid;gap:8px;padding:14px;border:1px solid #e3e8f1;border-radius:11px;background:#fbfcff}
+  .checkin-rewards h3{margin:0;color:var(--admin-ink);font-size:13px}
+  .checkin-rewards-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .checkin-rewards-head button{min-height:30px;padding:0 10px;border:1px solid #d6dfef;background:#fff;color:#4b6297;border-radius:7px;box-shadow:none;font-size:11px}
+  .checkin-reward-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end}
+  .checkin-reward-row label{font-size:11px}
+  .checkin-reward-row button{min-height:36px;padding:0 10px;background:#fff;color:#a64d4d;border:1px solid #efcfd0;box-shadow:none}
+  .checkin-helper{grid-column:1/-1;margin:0;color:var(--admin-muted);font-size:11px;line-height:1.55}
+  .checkin-table{overflow:auto}
+  .checkin-table table{min-width:720px}
+  .checkin-streak{display:inline-flex;align-items:center;padding:3px 7px;border-radius:6px;background:#fff4dd;color:#a36b1c;font-size:10px;font-weight:650}
+  .checkin-points{color:#2b8a61;font-weight:650;white-space:nowrap}
+  @media(max-width:1040px){.admin-shell{padding-left:24px;padding-right:24px}.admin-workspace{grid-template-columns:196px minmax(0,1fr);gap:18px}.admin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:760px){body.admin-page .topbar{padding:0 14px;height:62px}.admin-shell{padding:24px 14px 56px}.admin-shell .hero h1{font-size:28px}.admin-toolbar{align-items:stretch;flex-wrap:wrap;margin-bottom:16px}.admin-toolbar .admin-session{order:0}.admin-toolbar #message{width:100%;order:5;text-align:left}.admin-workspace{display:block}.admin-sidebar{position:static;min-height:0;margin-bottom:16px;padding:14px 11px;border-radius:14px}.admin-sidebar-head{padding:1px 7px 13px}.admin-sidebar-foot{display:none}.admin-shell .admin-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.admin-shell .admin-tab{min-height:38px;justify-content:flex-start;padding:0 9px;font-size:11px}.admin-shell .admin-tab:before{width:5px;height:5px}.admin-panel-stack{gap:12px}.admin-grid,.referral-summary,.checkin-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.admin-stat{min-height:88px;padding:13px}.admin-stat strong{font-size:21px}.admin-list,.admin-form{padding:18px 15px;border-radius:13px}.admin-workbench{display:block}.admin-workbench>h2,.admin-workbench>p{margin-bottom:11px}.admin-subsection{margin-bottom:12px;padding:16px 14px}.admin-form,.admin-subform,.referral-config-form,.checkin-config-form{grid-template-columns:1fr}.admin-form h2,.admin-form>.admin-helper,.admin-form textarea,.admin-form .form-wide,.admin-form .permission-options,.admin-subform .form-wide,.admin-subform button,.referral-config-note,.checkin-config-wide,.checkin-helper{grid-column:auto}.admin-list th,.admin-list td{padding:10px 8px}.admin-filter,.referral-filter{align-items:flex-start;flex-wrap:wrap}.admin-filter h2,.referral-filter h2{width:100%;margin-bottom:2px}.admin-filter button,.referral-filter button{margin-left:auto}}
+  @media(max-width:420px){.admin-shell .admin-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-toolbar button{flex:1}.admin-toolbar .readonly-note{width:100%}.admin-grid,.checkin-summary{grid-template-columns:1fr 1fr}.admin-stat span{font-size:10px}.admin-stat strong{font-size:19px}}
+  @media(prefers-reduced-motion:reduce){.admin-shell .admin-tab,.admin-form button,.admin-subform button{transition:none}}
+  /* Final responsive pass: keep the console compact and readable on narrow H5 screens. */
+  body.admin-page .topbar{min-width:0}
+  body.admin-page .topbar nav{min-width:0;overflow:hidden;gap:18px}
+  body.admin-page .topbar nav a{white-space:nowrap}
+  .admin-session{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .admin-form label,.admin-subform label,.admin-message-form label{min-width:0}
+  .admin-form input,.admin-form select,.admin-form textarea,.admin-subform input,.admin-subform select,.admin-subform textarea,.admin-message-form input,.admin-message-form select,.admin-message-form textarea{max-width:100%}
+  @media(max-width:600px){
+    body.admin-page .topbar{padding-inline:12px;gap:12px}
+    body.admin-page .topbar nav{gap:12px;overflow:visible}
+    body.admin-page .topbar nav a{font-size:12px}
+    body.admin-page .topbar nav a:nth-child(2){display:none}
+    .admin-shell .hero{margin-bottom:15px}
+    .admin-shell .hero .sub{font-size:12px}
+    .admin-toolbar{gap:7px;padding:10px 11px}
+    .admin-toolbar button{min-height:38px}
+    .admin-shell .admin-tab{min-height:42px;padding-inline:10px}
+    .admin-sidebar-head strong{font-size:13px}
+    .admin-panel-stack{gap:10px}
+    .admin-list,.admin-form{padding:16px 13px}
+    .admin-list h2,.admin-form h2{font-size:16px}
+    .admin-subsection{padding:15px 13px}
+    .admin-list th,.admin-list td{padding:9px 7px}
+  }
+  @media(max-width:380px){
+    body.admin-page .topbar nav a:nth-child(3){display:none}
+    body.admin-page .topbar{justify-content:space-between}
+    body.admin-page .topbar nav{display:none}
+    .admin-shell .admin-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .admin-toolbar{display:grid;grid-template-columns:1fr 1fr}
+    .admin-toolbar .admin-session,.admin-toolbar #message{grid-column:1/-1;width:100%}
+    .admin-toolbar #message{order:5}
+  }
+  </style>
+</head>
+<body class="admin-page">
+  <header class="topbar"><div class="brand"><img class="brand-logo" src="assets/iyesh-logo.webp" alt="月入万刀"><span>月入万刀管理</span></div><nav class="primary-nav" aria-label="主导航"><a href="index.html">返回检索</a><a class="active">内容管理</a><a href="membership.html">会员中心</a></nav></header>
+  <main class="shell admin-shell">
+    <section class="hero"><div><h1>内容管理</h1><p class="sub">内容、会员、积分与日志</p></div></section>
+    <section class="admin-toolbar"><span id="adminSession" class="readonly-note">管理员会话</span><button id="loadBtn" aria-label="刷新数据">刷新数据</button><button id="logoutBtn" aria-label="退出登录" type="button">退出登录</button><span id="message" class="admin-message">正在校验管理员会话…</span></section>
+    <div class="admin-workspace">
+    <aside class="admin-sidebar" aria-label="管理分区">
+      <div class="admin-sidebar-head"><img class="admin-sidebar-logo" src="assets/iyesh-logo.webp" alt="月入万刀"><div><strong>工作台</strong><small>月入万刀运营中心</small></div></div>
+      <nav class="admin-tabs" aria-label="管理分区" role="tablist">
+      <button class="admin-tab is-active" type="button" role="tab" aria-selected="true" data-admin-tab="overview">总览</button>
+      <button class="admin-tab" type="button" role="tab" aria-selected="false" data-admin-tab="content">内容审核</button>
+      <button class="admin-tab" type="button" role="tab" aria-selected="false" data-admin-tab="members">会员与积分</button>
+      <button class="admin-tab" type="button" role="tab" aria-selected="false" data-admin-tab="finance">提现管理</button>
+      <button class="admin-tab" type="button" role="tab" aria-selected="false" data-admin-tab="referral">分销管理</button>
+      <button class="admin-tab" type="button" role="tab" aria-selected="false" data-admin-tab="checkin">签到管理</button>
+      <button class="admin-tab" type="button" role="tab" aria-selected="false" data-admin-tab="messages">站内信</button>
+      <button class="admin-tab" type="button" role="tab" aria-selected="false" data-admin-tab="system">系统设置</button>
+      <button class="admin-tab" type="button" role="tab" aria-selected="false" data-admin-tab="logs">记录与日志</button>
+      </nav>
+      <div class="admin-sidebar-foot"><span class="admin-online-dot"></span><span>系统运行正常</span></div>
+    </aside>
+    <div class="admin-panel-stack">
+    <section id="stats" class="admin-grid" data-admin-panel="overview"></section>
+
+    <section class="admin-list" data-admin-panel="messages">
+      <h2>发送站内信</h2>
+      <form id="notificationForm" class="admin-message-form">
+        <label>发送范围<select name="scope" id="notificationScope"><option value="all">全站用户</option><option value="users">指定用户</option><option value="group">会员分组</option></select></label>
+        <label id="notificationRecipientsLabel">收件人<input name="userIds" id="notificationRecipients" placeholder="用户 ID，多个用逗号分隔" aria-label="收件人"></label>
+        <label id="notificationGroupsLabel" hidden>会员分组<select name="groupIds" id="notificationGroups" multiple size="3" aria-label="会员分组"><option value="">加载中…</option></select></label>
+        <label class="form-wide">标题<input name="title" maxlength="80" required placeholder="站内信标题" aria-label="标题"></label>
+        <label class="form-wide">内容<textarea name="body" maxlength="500" required placeholder="输入通知内容" aria-label="内容"></textarea></label>
+        <button type="submit">发送站内信</button>
+      </form>
+      <p id="notificationMessage" class="admin-message"></p>
+    </section>
+    <section class="admin-list admin-message-table" data-admin-panel="messages">
+      <div class="admin-filter"><h2>发送记录</h2><button id="refreshNotifications" type="button">刷新记录</button></div>
+      <table><caption class="sr-only">站内信发送记录</caption><thead><tr><th scope="col">收件人</th><th scope="col">标题</th><th scope="col">状态</th><th scope="col">批次</th><th scope="col">时间</th></tr></thead><tbody id="notificationRows"></tbody></table>
+    </section>
+
+    <section class="admin-list" data-admin-panel="overview"><h2>管理员与角色</h2><p class="admin-message">预设角色：超级管理员、内容管理员、财务管理员、客服管理员。只有超级管理员可以新增管理员、修改角色和停用账号。</p><form id="adminForm" class="admin-subform"><input name="username" placeholder="新管理员用户名" required aria-label="管理员用户名"><input name="name" placeholder="显示名称" aria-label="名称"><input name="password" type="password" minlength="8" placeholder="初始密码（至少 8 位）" required aria-label="密码"><select name="role" aria-label="管理员角色"><option value="content_admin">内容管理员</option><option value="finance_admin">财务管理员</option><option value="support_admin">客服管理员</option><option value="superadmin">超级管理员</option></select><button type="submit">新增管理员</button></form><table><caption class="sr-only">管理员列表</caption><thead><tr><th scope="col">用户名</th><th scope="col">名称</th><th scope="col">角色</th><th scope="col">状态</th><th scope="col">最后登录</th><th scope="col">操作</th></tr></thead><tbody id="adminRows"></tbody></table></section>
+
+    <section class="admin-workbench">
+      <h2 data-admin-panel="members">线下会员与积分操作</h2>
+      <p data-admin-panel="members">线下确认收款后操作，所有变更留痕。</p>
+      <h2 data-admin-panel="system">系统设置</h2>
+      <p data-admin-panel="system">积分单位、购买指引与 SMTP</p>
+      <div class="admin-subsection" data-admin-panel="members">
+        <h3>手动开通会员</h3>
+        <p>为指定用户开通会员等级，可填写有效期和线下收款备注。</p>
+        <form id="membershipGrantForm" class="admin-subform">
+          <label>用户 ID / 登录账号<input name="userId" required placeholder="例如 user_123 或微信 OpenID" aria-label="用户 ID"></label>
+          <label>会员分组<select id="grantGroupId" name="groupId" required aria-label="会员分组 ID"><option value="">请先加载会员分组</option></select></label>
+          <label>对应套餐<select id="grantPlanId" name="planId"><option value="">不关联套餐</option></select></label>
+          <label>有效期（天）<input name="durationDays" type="number" min="1" value="30" required aria-label="有效期（天）"></label>
+          <label>开始时间<input name="startsAt" type="datetime-local" aria-label="开始时间"></label>
+          <label>线下收款备注<input name="note" placeholder="例如：微信转账，流水号后四位 1234" aria-label="备注"></label>
+          <button type="submit">确认开通</button>
+        </form>
+      </div>
+      <div class="admin-subsection" data-admin-panel="members">
+        <h3>手动充值积分</h3>
+        <p>积分用于单篇内容购买、打赏等权益，不与线上支付自动关联。</p>
+        <form id="pointsRechargeForm" class="admin-subform">
+          <label>用户 ID / 登录账号<input name="userId" required placeholder="请输入用户 ID" aria-label="用户 ID"></label>
+          <label>充值积分<input name="points" type="number" min="1" step="1" required placeholder="例如 1000"></label>
+          <label>充值来源<input name="source" value="线下充值" required aria-label="充值来源"></label>
+          <label>收款备注<input name="note" required placeholder="例如：会员赠送 / 线下转账流水号" aria-label="备注"></label>
+          <button type="submit">确认充值</button>
+        </form>
+      </div>
+      <div class="admin-subsection" data-admin-panel="system">
+        <h3>积分单位名称</h3>
+        <p>用户端的内容价格、打赏、余额和流水都会使用这里的名称。</p>
+        <form id="pointsConfigForm" class="admin-subform">
+          <label>积分名称<input name="unitName" maxlength="20" required placeholder="例如：能量值、星币、贡献分" aria-label="积分名称"></label>
+          <label>客服微信号<input name="wechatId" maxlength="80" placeholder="用户添加后购买兑换码" aria-label="客服微信号"></label>
+          <label>客服二维码图片地址<input name="qrCodeUrl" maxlength="500" placeholder="粘贴微信二维码图片地址" aria-label="客服二维码地址"></label>
+          <label>购买说明<input name="contactNote" maxlength="300" placeholder="例如：添加客服微信，线下购买兑换码" aria-label="购买说明"></label>
+          <label>线下开通标题<input name="offlineTitle" maxlength="50" placeholder="例如：线下开通" aria-label="线下开通标题"></label>
+          <label class="form-wide">线下开通说明<textarea name="offlineNote" maxlength="500" rows="3" placeholder="例如：添加客服微信，完成付款后我们会为你开通对应会员等级。" aria-label="线下开通说明"></textarea></label>
+          <button type="submit">保存积分与购买配置</button>
+        </form>
+      </div>
+      <div class="admin-subsection" data-admin-panel="system">
+        <h3>邮箱 SMTP</h3>
+        <p>用于注册验证码。密码只在保存时写入服务端，读取时不会回显；密码留空表示保持原配置。</p>
+        <form id="smtpForm" class="admin-subform">
+          <label>SMTP 主机<input name="host" required placeholder="smtp.qq.com" aria-label="SMTP 主机"></label>
+          <label>端口<input name="port" type="number" min="1" max="65535" value="465" required aria-label="SMTP 端口"></label>
+          <label>SMTP 用户名<input name="user" type="email" required placeholder="你的邮箱地址" aria-label="SMTP 用户名"></label>
+          <label>授权码 / 密码<input name="pass" type="password" autocomplete="new-password" placeholder="留空保持不变" aria-label="SMTP 授权码"></label>
+          <label>发件人显示名<input name="from" maxlength="200" placeholder="月入万刀 &lt;邮箱地址&gt;" aria-label="发件人显示名"></label>
+          <label class="admin-check"><input name="secure" type="checkbox" checked aria-label="启用 SSL/TLS"> 使用 SSL/TLS</label>
+          <button type="submit">保存 SMTP 配置</button>
+        </form>
+        <p id="smtpMessage" class="admin-message"></p>
+      </div>
+      <div class="admin-subsection" data-admin-panel="members">
+        <h3>生成积分兑换 CDKEY</h3>
+        <p>用户线下付款后，将一次性兑换码发给用户。兑换码只能使用一次，历史记录不可删除。</p>
+        <form id="cdkeyForm" class="admin-subform">
+          <label>积分面额<input name="points" type="number" min="1" step="1" value="1000" required></label>
+          <label>生成数量<input name="quantity" type="number" min="1" max="500" step="1" value="1" required aria-label="生成数量"></label>
+          <label>过期时间<input name="expiresAt" type="datetime-local" aria-label="过期时间"></label>
+          <label>备注<input name="note" maxlength="300" placeholder="例如：微信转账批次 20261015" aria-label="备注"></label>
+          <button type="submit">生成兑换码</button>
+        </form>
+        <p id="cdkeyMessage" class="admin-message"></p>
+      </div>
+    </section>
+
+    <section class="admin-list" data-admin-panel="finance">
+      <div class="admin-filter"><h2>提现设置</h2><span class="readonly-note">提现金额按提交时的比例计算</span></div>
+      <form id="withdrawalConfigForm" class="admin-subform">
+        <label>兑换比例（积分 / 元）<input name="pointsPerYuan" type="number" min="0.01" step="0.01" required placeholder="例如 100 积分 = 1 元" aria-label="兑换比例"></label>
+        <label>提现手续费（百分比）<input name="withdrawFeePercent" type="number" min="0" max="100" step="0.01" required placeholder="例如 2.5" aria-label="提现手续费"></label>
+        <button type="submit">保存提现设置</button>
+      </form>
+      <p id="withdrawalConfigMessage" class="admin-message"></p>
+    </section>
+    <section class="admin-list admin-list--scroll" data-admin-panel="finance">
+      <div class="admin-filter"><h2>提现申请</h2><select id="withdrawalStatusFilter" aria-label="提现状态"><option value="">全部状态</option><option value="pending">待处理</option><option value="paid">已打款</option><option value="rejected">已驳回</option></select><input id="withdrawalQuery" placeholder="用户 / 手机号 / 申请编号" aria-label="提现记录筛选"><button id="refreshWithdrawals" type="button">刷新记录</button></div>
+      <table><caption class="sr-only">提现申请记录</caption><thead><tr><th scope="col">申请人</th><th scope="col">提现积分</th><th scope="col">金额</th><th scope="col">手续费</th><th scope="col">到账金额</th><th scope="col">收款手机</th><th scope="col">状态</th><th scope="col">申请时间</th><th scope="col">操作</th></tr></thead><tbody id="withdrawalRows"></tbody></table>
+    </section>
+    <section id="referralStats" class="referral-summary" data-admin-panel="referral"></section>
+    <section class="admin-list" data-admin-panel="referral">
+      <div class="referral-filter"><h2>分销设置</h2><span class="readonly-note">仅计算直属下级，二级不计入上级</span></div>
+      <form id="referralConfigForm" class="referral-config-form">
+        <label>直属提成比例（百分比）<input name="directPercent" type="number" min="0" max="100" step="0.01" required placeholder="例如 10"></label>
+        <label>二级提成比例（固定）<input name="secondPercent" type="text" value="0%（不计入）" readonly aria-label="二级提成比例"></label>
+        <p class="referral-config-note">A 分享给 B 后，B 是 A 的直属下级；B 再邀请 C 时，C 只绑定 B，A 不获得 C 的提成。直属下线购买积分或兑换会员时，按此比例奖励给上级。</p>
+        <button type="submit">保存分销设置</button>
+      </form>
+      <p id="referralConfigMessage" class="admin-message"></p>
+    </section>
+    <section class="admin-list referral-table" data-admin-panel="referral">
+      <div class="referral-filter"><h2>邀请关系</h2><select id="referralLevelFilter" aria-label="邀请层级"><option value="">全部层级</option><option value="1">直属下级</option></select><select id="referralStatusFilter" aria-label="邀请状态"><option value="">全部状态</option><option value="active">已绑定</option><option value="disabled">已停用</option></select><input id="referralQuery" placeholder="用户 / 上级 / ID" aria-label="邀请关系筛选"><button id="refreshReferrals" type="button">刷新记录</button></div>
+      <table><caption class="sr-only">邀请关系记录</caption><thead><tr><th scope="col">下级用户</th><th scope="col">上级用户</th><th scope="col">层级</th><th scope="col">状态</th><th scope="col">绑定时间</th></tr></thead><tbody id="referralRows"></tbody></table>
+    </section>
+    <section class="admin-list referral-table" data-admin-panel="referral">
+      <div class="referral-filter"><h2>提成流水</h2><select id="commissionStatusFilter" aria-label="提成状态"><option value="">全部状态</option><option value="pending">待结算</option><option value="paid">已结算</option><option value="rejected">已驳回</option></select><input id="commissionQuery" placeholder="用户 / 来源 / ID" aria-label="提成流水筛选"><button id="refreshReferralCommissions" type="button">刷新流水</button></div>
+      <table><caption class="sr-only">分销提成流水</caption><thead><tr><th scope="col">受益上级</th><th scope="col">下级用户</th><th scope="col">消费类型</th><th scope="col">消费积分</th><th scope="col">提成比例</th><th scope="col">提成积分</th><th scope="col">状态</th><th scope="col">时间</th></tr></thead><tbody id="referralCommissionRows"></tbody></table>
+    </section>
+    <section id="checkinStats" class="checkin-summary" data-admin-panel="checkin"></section>
+    <section class="admin-list" data-admin-panel="checkin">
+      <div class="referral-filter"><h2>签到规则</h2><span class="readonly-note">规则变更只影响后续签到</span></div>
+      <form id="checkinConfigForm" class="checkin-config-form">
+        <label class="checkin-toggle"><input name="enabled" type="checkbox"> 开启每日签到</label>
+        <label>每日签到积分<input name="dailyPoints" type="number" min="0" max="1000000" step="1" required placeholder="例如 10"></label>
+        <label>连续签到每日额外积分<input name="streakBonusPoints" type="number" min="0" max="1000000" step="1" value="0" required placeholder="例如 2"></label>
+        <label>排行榜周期<select name="leaderboardDays"><option value="7">近 7 天</option><option value="30" selected>近 30 天</option><option value="90">近 90 天</option><option value="365">近 365 天</option></select></label>
+        <div class="checkin-rewards checkin-config-wide">
+          <div class="checkin-rewards-head"><h3>连续签到额外奖励</h3><button id="addCheckinReward" type="button">新增规则</button></div>
+          <div id="checkinRewardRows"></div>
+        </div>
+        <p class="checkin-helper">每日签到先发放基础积分；连续签到每日额外积分会从第 2 天起发放，达到里程碑天数后再发放对应奖励。同一自然日只能签到一次，补签不计入连续天数。</p>
+        <button type="submit">保存签到规则</button>
+      </form>
+      <p id="checkinConfigMessage" class="admin-message"></p>
+    </section>
+    <section class="admin-list checkin-table" data-admin-panel="checkin">
+      <div class="referral-filter"><h2>签到排行榜</h2><select id="checkinLeaderboardPeriod" aria-label="排行榜周期"><option value="7">近 7 天</option><option value="30" selected>近 30 天</option><option value="90">近 90 天</option><option value="365">近 365 天</option></select><button id="refreshCheckinStats" type="button">刷新排行</button></div>
+      <table><caption class="sr-only">签到排行榜</caption><thead><tr><th scope="col">排名</th><th scope="col">用户</th><th scope="col">连续签到</th><th scope="col">签到次数</th><th scope="col">获得积分</th><th scope="col">最近签到</th></tr></thead><tbody id="checkinLeaderboardRows"></tbody></table>
+    </section>
+    <section class="admin-list checkin-table" data-admin-panel="checkin">
+      <div class="referral-filter"><h2>签到记录</h2><input id="checkinRecordQuery" placeholder="用户 / ID / 日期" aria-label="签到记录筛选"><button id="refreshCheckinRecords" type="button">刷新记录</button></div>
+      <table><caption class="sr-only">签到记录</caption><thead><tr><th scope="col">用户</th><th scope="col">签到日期</th><th scope="col">基础积分</th><th scope="col">连续奖励</th><th scope="col">合计积分</th><th scope="col">连续天数</th><th scope="col">时间</th></tr></thead><tbody id="checkinRecordRows"></tbody></table>
+    </section>
+    <dialog id="withdrawalDialog" class="admin-dialog">
+      <form method="dialog"><button class="admin-dialog-close" aria-label="关闭">×</button></form>
+      <div id="withdrawalDetail"></div>
+    </dialog>
+
+    <form id="postForm" class="admin-form" data-admin-panel="content"><h2>发布内容</h2><input name="title" placeholder="标题" required aria-label="标题"><input name="authorName" placeholder="作者" aria-label="作者"><select name="platform" required aria-label="平台"><option value="">选择平台</option><option>YouTube</option><option>小红书</option><option>公众号</option><option>抖音</option><option>视频号</option><option>TikTok</option><option>X</option><option>Instagram</option><option>Reddit</option><option>B站</option><option>快手</option><option>闲鱼</option><option>其他</option></select><select name="accessType" aria-label="访问方式"><option value="free">免费内容</option><option value="member">会员专享</option><option value="paid">单篇积分购买</option></select><input name="pricePoints" type="number" min="0" step="1" placeholder="单篇价格（积分）" aria-label="单篇价格（积分）"><select id="adminPostPlanId" name="requiredPlanId" aria-label="会员套餐（可选）"><option value="">不限定套餐</option></select><textarea name="excerpt" placeholder="摘要" aria-label="摘要"></textarea><textarea name="content" placeholder="正文（纯文本，可用空行分段）" aria-label="正文"></textarea><label><input name="digest" type="checkbox" aria-label="标记为精华"> 标记为精华</label><button type="submit">发布</button></form>
+
+    <form id="groupForm" class="admin-form" data-admin-panel="members"><h2>会员分组与权限</h2><p class="admin-helper">会员分组就是用户看到的会员等级。名称、说明、排序、首开赠送积分和权限都可以自定义；修改会保留历史记录。</p><input name="id" type="hidden"><input name="code" placeholder="分组编码，例如 pro" required aria-label="编码或兑换码"><input name="name" placeholder="分组名称，例如 专业会员" required aria-label="名称"><input name="description" placeholder="权益说明" aria-label="权益说明"><input name="rank" type="number" min="0" value="10" placeholder="排序" aria-label="排序"><input name="giftPoints" type="number" min="0" step="1" value="0" placeholder="首次开通赠送积分" aria-label="赠送积分"><select name="status" aria-label="状态"><option value="active">启用</option><option value="disabled">停用</option></select><div class="permission-options"><label><input type="checkbox" name="permission" value="content.member.read">查看会员内容</label><label><input type="checkbox" name="permission" value="content.download">下载资料</label><label><input type="checkbox" name="permission" value="content.publish">发布内容</label><label><input type="checkbox" name="permission" value="content.tip">积分打赏</label><label><input type="checkbox" name="permission" value="community.private">加入私享社区</label><label><input type="checkbox" name="permission" value="support.priority">优先客服</label></div><input name="customPermissions" class="form-wide" placeholder="其他权限（用逗号分隔，例如 report.export,course.live）" aria-label="自定义权限"><button type="submit">新增分组</button><button id="cancelGroupEdit" aria-label="取消编辑" type="button" hidden>取消编辑</button></form>
+
+    <form id="planForm" class="admin-form" data-admin-panel="members"><h2>会员套餐</h2><input name="name" placeholder="套餐名称，例如 创作者会员" required aria-label="名称"><input name="priceCents" type="number" min="0" placeholder="线下参考价（分）" required aria-label="线下参考价（分）"><input name="redeemPoints" type="number" min="0" step="1" placeholder="积分开通所需积分" required aria-label="兑换所需积分"><input name="durationDays" type="number" min="1" value="30" placeholder="有效期（天）" required aria-label="有效期（天）"><select id="planGroupId" name="groupId" aria-label="会员分组"><option value="">请选择会员分组</option></select><input name="giftPoints" type="number" min="0" step="1" value="0" placeholder="本套餐赠送积分" aria-label="赠送积分"><input name="description" placeholder="权益说明" aria-label="权益说明"><button type="submit">新增套餐</button></form>
+    <form id="tagForm" class="admin-form" data-admin-panel="content"><h2>新增平台标签</h2><input type="hidden" name="dimension" value="platform"><input name="name" placeholder="平台名称" required aria-label="平台名称"><button type="submit">新增平台</button></form>
+
+    <section class="admin-list" data-admin-panel="content"><h2>内容列表</h2><table><caption class="sr-only">内容列表</caption><thead><tr><th scope="col">标题</th><th scope="col">平台</th><th scope="col">权益</th><th scope="col">状态</th><th scope="col">操作</th></tr></thead><tbody id="postRows"></tbody></table></section>
+    <section class="admin-list" data-admin-panel="content"><h2>举报处理</h2><table><caption class="sr-only">内容举报列表</caption><thead><tr><th scope="col">内容</th><th scope="col">原因</th><th scope="col">说明</th><th scope="col">时间</th><th scope="col">操作</th></tr></thead><tbody id="reportRows"></tbody></table></section>
+    <section class="admin-list" data-admin-panel="content"><h2>评论举报</h2><table><caption class="sr-only">评论举报列表</caption><thead><tr><th scope="col">评论</th><th scope="col">内容</th><th scope="col">原因</th><th scope="col">时间</th><th scope="col">操作</th></tr></thead><tbody id="commentReportRows"></tbody></table></section>
+    <section class="admin-list admin-list--scroll" data-admin-panel="content"><h2>评论管理</h2><div class="admin-filter"><span class="admin-message">可隐藏违规评论，操作会写入系统日志。</span><button id="refreshComments" type="button">刷新评论</button></div><table><caption class="sr-only">评论管理列表</caption><thead><tr><th scope="col">评论</th><th scope="col">内容</th><th scope="col">作者</th><th scope="col">时间</th><th scope="col">状态</th><th scope="col">操作</th></tr></thead><tbody id="commentRows"></tbody></table></section>
+
+    <section class="admin-list" data-admin-panel="members"><h2>会员分组</h2><table><caption class="sr-only">会员分组列表</caption><thead><tr><th scope="col">编码</th><th scope="col">名称</th><th scope="col">首开赠送</th><th scope="col">权限</th><th scope="col">排序</th><th scope="col">状态</th><th scope="col">操作</th></tr></thead><tbody id="groupRows"></tbody></table></section>
+    <section class="admin-list" data-admin-panel="members"><h2>会员套餐</h2><table><caption class="sr-only">会员套餐列表</caption><thead><tr><th scope="col">名称</th><th scope="col">所属等级</th><th scope="col">价格</th><th scope="col">有效期</th><th scope="col">赠送积分</th><th scope="col">状态</th></tr></thead><tbody id="planRows"></tbody></table></section>
+    <section class="admin-list admin-list--scroll" data-admin-panel="members"><h2>已开通会员</h2><div class="admin-filter"><input id="membershipQuery" placeholder="用户 ID 筛选"><button id="refreshMemberships" aria-label="刷新会员记录" type="button">刷新记录</button></div><table><caption class="sr-only">已开通会员列表</caption><thead><tr><th scope="col">用户</th><th scope="col">会员等级</th><th scope="col">套餐</th><th scope="col">有效期</th><th scope="col">状态</th><th scope="col">操作</th></tr></thead><tbody id="membershipRows"></tbody></table></section>
+    <section class="admin-list admin-list--scroll" data-admin-panel="members"><h2>积分充值记录</h2><span class="readonly-note">🔒 记录不可删除，只能查询</span><table><caption class="sr-only">积分充值记录</caption><thead><tr><th scope="col">用户</th><th scope="col">变动积分</th><th scope="col">余额</th><th scope="col">来源</th><th scope="col">备注</th><th scope="col">操作人</th><th scope="col">时间</th></tr></thead><tbody id="pointRows"></tbody></table></section>
+    <section class="admin-list admin-list--scroll" data-admin-panel="members"><h2>积分兑换 CDKEY</h2><span class="readonly-note">🔒 已生成和已兑换记录不可删除，只能停用未使用的兑换码</span><table><caption class="sr-only">积分兑换码列表</caption><thead><tr><th scope="col">兑换码</th><th scope="col">面额</th><th scope="col">状态</th><th scope="col">批次</th><th scope="col">兑换用户</th><th scope="col">兑换时间</th><th scope="col">有效期</th><th scope="col">操作</th></tr></thead><tbody id="cdkeyRows"></tbody></table></section>
+    <section class="admin-list" data-admin-panel="logs"><h2>订单与打赏</h2><table><caption class="sr-only">订单与打赏记录</caption><thead><tr><th scope="col">订单</th><th scope="col">类型</th><th scope="col">金额</th><th scope="col">状态</th><th scope="col">时间</th></tr></thead><tbody id="orderRows"></tbody></table><p id="tipSummary" class="admin-message"></p></section>
+    <section class="admin-list admin-list--scroll" data-admin-panel="logs"><h2>系统日志</h2><div class="admin-filter"><span class="readonly-note">🔒 只读审计日志，不提供删除入口</span><label class="admin-message">显示条数 <input id="auditLimit" type="number" min="10" max="500" value="100"></label><button id="refreshAudit" aria-label="刷新系统日志" type="button">刷新日志</button></div><table><caption class="sr-only">系统审计日志</caption><thead><tr><th scope="col">时间</th><th scope="col">操作人</th><th scope="col">动作</th><th scope="col">对象</th><th scope="col">对象 ID</th><th scope="col">详情</th></tr></thead><tbody id="auditRows"></tbody></table></section>
+    </div>
+    </div>
+  </main>
+  <script src="api-config.js?v=20261016api2"></script><script src="admin.js?v=20261016checkin"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

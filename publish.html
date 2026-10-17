@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>发布内容 · 月入万刀</title>
+  <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
+  <link rel="stylesheet" href="styles.css?v=20261016g">
+  <link rel="stylesheet" href="publish.css?v=20261017ui7">
+</head>
+<body class="publish-page">
+  <header class="topbar">
+    <div class="brand"><img class="brand-logo" src="assets/iyesh-logo.webp" alt=""><span>月入万刀</span></div>
+    <nav class="primary-nav" aria-label="主导航"><a href="index.html">首页</a><a href="index.html">内容检索</a><a class="active" aria-current="page">发布内容</a><a href="membership.html">会员中心</a></nav>
+    <div class="top-actions"><a class="avatar" href="profile.html" aria-label="个人中心">林</a></div>
+  </header>
+
+  <main class="shell publish-shell publish-shell-compact">
+    <div class="publish-heading">
+      <div>
+        <h1>发布内容</h1>
+      </div>
+      <div class="publish-heading-actions">
+        <span id="draftStatus" class="draft-status">未保存</span>
+        <button id="saveDraftBtn" class="secondary-btn heading-action" type="button">保存草稿</button>
+        <button class="primary-btn heading-action" type="submit" form="publishForm">提交审核</button>
+      </div>
+    </div>
+
+    <form id="publishForm" class="publish-editor publish-editor-compact">
+      <section class="publish-block publish-basic-block">
+        <div class="publish-block-title"><h2>基础信息</h2><span>必填</span></div>
+        <label class="field field-wide"><span>标题</span><input name="title" maxlength="120" placeholder="写一个清楚的标题" required><small class="field-help"><span></span><span data-count-for="title">0 / 120</span></small></label>
+        <label class="field field-wide"><span>摘要</span><textarea name="excerpt" maxlength="300" rows="2" placeholder="一句话说明内容价值"></textarea><small class="field-help"><span></span><span data-count-for="excerpt">0 / 300</span></small></label>
+      </section>
+
+      <section id="bodyEditor" class="publish-block publish-body-block">
+        <div class="publish-block-title">
+          <h2>正文</h2>
+          <div class="body-tools"><span>选填</span><button id="bodyInlineUpload" class="body-inline-upload" type="button">＋ 添加图片</button></div>
+        </div>
+        <div id="bodyPreview" class="body-preview" hidden>
+          <div class="body-preview-head"><span>正文预览</span><span>实时</span></div>
+          <div id="bodyPreviewContent" class="body-preview-content"></div>
+        </div>
+        <label class="field field-wide"><span>正文内容</span><textarea name="content" class="content-editor" maxlength="20000" rows="12" placeholder="写下经验、步骤或案例"></textarea><small class="field-help"><span></span><span data-count-for="content">0 / 20000</span></small></label>
+        <div class="media-panel media-panel-compact">
+          <div class="media-panel-head"><span class="media-title">正文图片</span><span id="mediaCount" class="media-limit">0 / 8 张 · 单张不超过 5MB</span></div>
+          <div class="media-grid media-grid-body">
+            <label class="upload-dropzone body-upload"><input id="bodyImageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple><span class="upload-plus">＋</span><strong>添加图片</strong></label>
+          </div>
+          <div id="bodyImageList" class="body-image-list"></div>
+          <p id="uploadMessage" class="upload-message" role="status"></p>
+        </div>
+      </section>
+
+      <section class="publish-block access-section publish-access-block">
+        <div class="publish-block-title"><h2>访问权限</h2><span>必填</span></div>
+        <div class="form-row form-row-access">
+          <label class="field"><span>可见范围</span><select name="accessType"><option value="free">免费公开</option><option value="member">会员专享</option><option value="paid">积分付费</option></select></label>
+          <label class="field"><span>价格（积分）</span><input name="pricePoints" type="number" min="0" step="1" value="0" placeholder="0"></label>
+        </div>
+        <div id="memberPlanField" class="field member-plan-field" hidden>
+          <span>会员等级 <small>可选</small></span>
+          <div id="memberPlanOptions" class="plan-options" role="group" aria-label="会员等级"></div>
+          <small id="memberPlanHint" class="field-help">留空表示全部会员</small>
+        </div>
+      </section>
+
+      <div class="editor-footer editor-footer-compact">
+        <p id="publishMessage" class="form-message" role="status"></p>
+      </div>
+    </form>
+    <div id="submissionCard" class="submission-card submission-card-compact" hidden><p id="submissionText" class="sub"></p><a href="profile.html">查看我的内容 →</a></div>
+  </main>
+  <script src="api-config.js?v=20261016api2"></script><script src="publish.js?v=20261017j4"></script><script src="nav.js"></script>
+</body>
+</html>

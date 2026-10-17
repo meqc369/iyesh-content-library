@@ -1,0 +1,15 @@
+{
+  "name": "content-library-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node smoke.mjs",
+    "test:production": "node production-smoke.mjs",
+    "import": "node import-content.mjs"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.15",
+    "sharp": "^0.35.5"
+  }
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "external_post_001",
+    "title": "授权内容示例",
+    "excerpt": "摘要内容",
+    "content": "正文第一段\n\n正文第二段",
+    "platform": "YouTube",
+    "project": "出海",
+    "skill": "AI",
+    "authorName": "内容作者",
+    "publishedAt": "2026-10-14T08:00:00Z",
+    "digest": false
+  }
+]

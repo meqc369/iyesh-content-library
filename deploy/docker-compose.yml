@@ -1,0 +1,26 @@
+services:
+  content-api:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      PORT: 8787
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN}
+      ENABLE_DEV_LOGIN: ${ENABLE_DEV_LOGIN:-false}
+      WECHAT_APPID: ${WECHAT_APPID:-}
+      WECHAT_SECRET: ${WECHAT_SECRET:-}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-wechat}
+      WECHAT_MCHID: ${WECHAT_MCHID:-}
+      WECHAT_API_KEY: ${WECHAT_API_KEY:-}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+    volumes:
+      - content-data:/app/data
+      - content-uploads:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  content-data:
+  content-uploads:

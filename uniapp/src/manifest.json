@@ -1,0 +1,12 @@
+{
+  "name": "内容库",
+  "appid": "__UNI__CONTENT_LIBRARY",
+  "description": "H5 和微信小程序内容检索平台",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "mp-weixin": {
+    "appid": "请替换为微信小程序 AppID",
+    "setting": { "urlCheck": true },
+    "usingComponents": true
+  }
+}

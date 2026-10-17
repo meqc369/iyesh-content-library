@@ -1,0 +1,21 @@
+{
+  "name": "content-library-uniapp",
+  "private": true,
+  "scripts": {
+    "dev:h5": "uni -p h5",
+    "dev:mp-weixin": "uni -p mp-weixin",
+    "build:h5": "uni build -p h5",
+    "build:mp-weixin": "uni build -p mp-weixin"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "npm:@dcloudio/uni-app@vue3",
+    "@dcloudio/uni-h5": "3.0.0-alpha-5030120260930001",
+    "@dcloudio/uni-mp-weixin": "3.0.0-alpha-5030120260930001",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@dcloudio/vite-plugin-uni": "3.0.0-alpha-5030120260930001",
+    "vite": "5.2.8",
+    "typescript": "^5.0.0"
+  }
+}

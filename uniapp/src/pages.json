@@ -1,0 +1,19 @@
+{
+  "pages": [
+    { "path": "pages/tags/index", "style": { "navigationBarTitleText": "内容检索", "navigationStyle": "default" } },
+    { "path": "pages/post/detail", "style": { "navigationBarTitleText": "内容详情", "navigationStyle": "default" } },
+    { "path": "pages/membership/index", "style": { "navigationBarTitleText": "会员中心", "navigationStyle": "default" } },
+    { "path": "pages/login/index", "style": { "navigationBarTitleText": "登录", "navigationStyle": "default" } },
+    { "path": "pages/profile/index", "style": { "navigationBarTitleText": "个人中心", "navigationStyle": "default" } },
+    { "path": "pages/publish/index", "style": { "navigationBarTitleText": "发布内容", "navigationStyle": "default" } }
+  ],
+  "tabBar": {
+    "color": "#7b8490",
+    "selectedColor": "#2d6bff",
+    "list": [
+      { "pagePath": "pages/tags/index", "text": "检索" },
+      { "pagePath": "pages/membership/index", "text": "会员" },
+      { "pagePath": "pages/profile/index", "text": "我的" }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>内容检索 · 月入万刀</title></head>
+<body>
+<script>
+  // Resolve relative to the deployed static root so `/tags` also works when
+  // the H5 bundle is mounted under a path such as `/content/`.
+  const target = new URL('../index.html', location.href)
+  target.search = location.search
+  target.hash = location.hash
+  location.replace(target.toString())
+</script>
+<noscript>请启用 JavaScript 后访问内容检索。</noscript>
+</body>
+</html>
