@@ -111,7 +111,7 @@
           <button class="share" type="button" data-share="${escapeHtml(post.id)}" aria-label="分享《${escapeHtml(post.title)}》">${icon('share')}</button>
         </div>
       </div>
-      ${showThumb ? `<a class="feed-item__thumb" href="${url}" tabindex="-1" aria-hidden="true"><img src="${escapeHtml(window.App.mediaUrl(thumb))}" alt="" loading="lazy"></a>` : ''}
+      ${showThumb ? `<a class="feed-item__thumb" href="${url}" tabindex="-1" aria-hidden="true"><img src="${escapeHtml(window.App.mediaUrl(thumb))}" alt="" loading="lazy" decoding="async"></a>` : ''}
     </article>`;
   }
   function skeletonHtml(count = 4) {

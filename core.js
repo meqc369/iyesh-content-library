@@ -489,7 +489,7 @@
       while (index < lines.length) {
         const line = lines[index];
         const image = line.trim().match(INLINE_IMAGE);
-        if (image) { html.push(`<figure><img src="${escapeHtml(resolve(image[2]))}" alt="${escapeHtml(image[1] || '正文配图')}">${image[1] ? `<figcaption>${escapeHtml(image[1])}</figcaption>` : ''}</figure>`); index += 1; continue; }
+        if (image) { html.push(`<figure><img src="${escapeHtml(resolve(image[2]))}" alt="${escapeHtml(image[1] || '正文配图')}" loading="lazy" decoding="async">${image[1] ? `<figcaption>${escapeHtml(image[1])}</figcaption>` : ''}</figure>`); index += 1; continue; }
         const heading = line.match(HEADING);
         if (heading) { html.push(`<h${heading[1].length}>${inlineText(heading[2])}</h${heading[1].length}>`); index += 1; continue; }
         const group = groups.find(([pattern]) => pattern.test(line));

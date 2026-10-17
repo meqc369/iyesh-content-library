@@ -284,7 +284,7 @@ function contentHtml(post) {
   const imageBase = UPLOAD_PUBLIC_BASE_URL || ''
   const used = new Set()
   let imageIndex = 0
-  const figure = (url, caption) => { imageIndex += 1; return `<figure class="post-image"><img src="${escapeHtml(`${imageBase}${url}`)}" alt="${escapeHtml(caption || `正文配图 ${imageIndex}`)}" loading="lazy">${caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ''}</figure>` }
+  const figure = (url, caption) => { imageIndex += 1; return `<figure class="post-image"><img src="${escapeHtml(`${imageBase}${url}`)}" alt="${escapeHtml(caption || `正文配图 ${imageIndex}`)}" loading="lazy" decoding="async">${caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ''}</figure>` }
   const html = []
   for (const block of normalizeContentLines(post.content || post.excerpt || '').split(/\n{2,}/)) {
     const lines = block.split('\n').map(line => line.trimEnd()).filter(line => line.trim())
