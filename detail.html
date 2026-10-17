@@ -1,6 +1,55 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>内容详情 · 月入万刀</title><meta name="description" content="月入万刀实战内容详情"><meta property="og:type" content="article"><meta property="og:site_name" content="月入万刀"><meta property="og:title" content="内容详情 · 月入万刀"><meta property="og:description" content="月入万刀实战内容详情"><meta property="og:url" content=""><meta property="og:image" content="assets/iyesh-logo.webp"><meta name="twitter:card" content="summary_large_image"><link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
-  <link rel="stylesheet" href="styles.css?v=20261017platform"></head>
-<body><header class="topbar"><div class="brand"><img class="brand-logo" src="assets/iyesh-logo.webp" alt=""><span>月入万刀</span></div><nav class="primary-nav" aria-label="主导航"><a href="index.html">首页</a><a class="active" href="index.html">内容检索</a><a href="publish.html">发布内容</a><a href="membership.html">会员中心</a></nav><div class="top-actions"><a class="avatar" href="profile.html" aria-label="个人中心">林</a></div></header><main class="shell detail-shell"><button class="back-btn" onclick="history.back()">← 返回检索</button><article id="detail" class="detail-card"><p class="sub">正在加载内容…</p></article><section class="detail-card"><div class="detail-head"><div><h2>评论</h2></div><span id="commentCount"></span></div><div class="comment-toolbar"><label>排序<select id="commentSort"><option value="latest">最新</option><option value="oldest">最早</option><option value="hot">最热</option></select></label><button id="markCommentRefresh" class="link-btn" type="button">刷新</button></div><div id="comments" class="comments"></div><button id="commentLoadMore" class="load-more comment-load-more" type="button" hidden>加载更多评论</button><form id="commentForm" class="comment-form"><label class="sr-only" for="commentInput">评论内容</label><textarea id="commentInput" placeholder="写下你的评论" maxlength="500" required></textarea><button type="submit">发表评论</button></form></section></main><div id="toast" class="toast"></div><script src="api-config.js?v=20261016api2"></script><script src="share.js?v=20261017platform"></script><script src="detail.js?v=20261017platform"></script>  <script src="nav.js"></script>
-</body></html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="format-detection" content="telephone=no">
+  <title>内容详情 · 月入万刀</title>
+  <meta name="description" content="月入万刀实战内容详情">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="月入万刀">
+  <meta property="og:title" content="内容详情 · 月入万刀">
+  <meta property="og:description" content="月入万刀实战内容详情">
+  <meta property="og:image" content="assets/iyesh-logo.webp">
+  <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
+  <link rel="preload" href="assets/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css?v=20261017r1">
+</head>
+<body data-page="discover" class="detail-page">
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="brand" href="index.html" aria-label="月入万刀首页"><img src="assets/iyesh-logo.webp" alt="" width="32" height="32"><span>月入万刀</span></a>
+      <nav class="site-nav" aria-label="主导航"><a href="index.html" data-nav="discover">发现</a><a href="membership.html" data-nav="membership">会员中心</a><a href="profile.html" data-nav="profile">个人中心</a></nav>
+      <div class="site-actions">
+        <a class="btn btn--primary btn--sm hide-mobile" href="publish.html" data-icon="plus">发布内容</a>
+        <a class="icon-btn hide-mobile" href="profile.html#messages" aria-label="消息" data-icon="bell"><span class="dot-badge" data-unread hidden></span></a>
+        <a class="account-link" href="login.html" data-account>登录</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-main">
+    <div class="container detail-layout">
+      <aside class="action-rail" id="actionRail" aria-label="互动"></aside>
+      <article class="article" id="article" aria-busy="true">
+        <a class="back-link" href="index.html" id="backLink" data-icon="back">返回</a>
+        <div class="article-head">
+          <div class="skeleton" style="height:16px;width:30%;margin-bottom:16px"></div>
+          <div class="skeleton" style="height:30px;width:92%"></div>
+          <div class="skeleton" style="height:30px;width:60%;margin-top:10px"></div>
+        </div>
+      </article>
+      <aside class="detail-aside" id="detailAside" aria-label="作者与相关内容"></aside>
+    </div>
+  </main>
+
+  <div class="action-bar" id="actionBar" hidden></div>
+
+  <script src="api-config.js?v=20261017r1"></script>
+  <script src="core.js?v=20261017r1"></script>
+  <script src="assets/vendor/qrcode.js?v=20261017r1"></script>
+  <script src="share.js?v=20261017r1"></script>
+  <script src="detail.js?v=20261017r1"></script>
+</body>
+</html>

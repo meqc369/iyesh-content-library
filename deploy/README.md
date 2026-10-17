@@ -1,3 +1,17 @@
+# 一键更新线上版本（nginx + systemd / pm2 部署）
+
+线上服务器用 root 登录后执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/meqc369/iyesh-content-library/main/deploy/update.sh -o /root/iyesh-update.sh
+bash /root/iyesh-update.sh
+```
+
+脚本会先找到正在运行的 API（8787 端口）和它的管理方式，下载 GitHub 上的最新代码并检查，然后把当前前端、API 代码和 `data/` 备份到 `/opt/iyesh/backups/<时间>/`，经你输入 `y` 确认后才替换 `/var/www/iyesh-h5` 的前端文件和 API 的 `index.mjs`。数据、上传图片、环境变量和 nginx 配置都不会改动。重启后会检查 `/health` 和首页，检查不通过会自动回滚。
+
+- 部署指定版本：`bash /root/iyesh-update.sh <commit>`
+- 手动回滚：`bash /root/iyesh-update.sh --rollback /opt/iyesh/backups/<时间>`
+
 # API 容器部署
 
 ```bash

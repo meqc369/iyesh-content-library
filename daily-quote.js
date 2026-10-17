@@ -505,12 +505,17 @@ const DAILY_QUOTES = [
 (() => {
   const nodes = document.querySelectorAll('[data-daily-quote]');
   if (!nodes.length || !DAILY_QUOTES.length) return;
+  /* The list pairs 100 openings with 5 shared endings; showing the opening on
+     its own reads naturally and never repeats a phrase twice in one line. */
+  const endings = ['，今天也会向前一步。', '，积累终会形成优势。', '，行动会带来答案。', '，时间会奖励坚持。', '，认真生活，自有回响。'];
+  const openings = [...new Set(DAILY_QUOTES.map(quote => { const ending = endings.find(item => quote.endsWith(item)); return ending ? quote.slice(0, -ending.length) : quote.replace(/[。.]$/, ''); }))].filter(Boolean);
   const storageKey = 'iyesh:lastDailyQuoteIndex';
-  const previous = Number.parseInt(localStorage.getItem(storageKey), 10);
-  let index = Math.floor(Math.random() * DAILY_QUOTES.length);
-  if (DAILY_QUOTES.length > 1 && Number.isInteger(previous) && index === previous) index = (index + 1) % DAILY_QUOTES.length;
-  localStorage.setItem(storageKey, String(index));
-  const quote = DAILY_QUOTES[index];
+  let previous = NaN;
+  try { previous = Number.parseInt(localStorage.getItem(storageKey), 10); } catch {}
+  let index = Math.floor(Math.random() * openings.length);
+  if (openings.length > 1 && index === previous) index = (index + 1) % openings.length;
+  try { localStorage.setItem(storageKey, String(index)); } catch {}
+  const quote = `${openings[index]}。`;
   nodes.forEach(node => {
     const text = node.querySelector('[data-quote-text]') || node;
     text.textContent = quote;

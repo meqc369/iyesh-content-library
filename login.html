@@ -1,24 +1,71 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>登录 / 注册 · 月入万刀</title><link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
-  <link rel="stylesheet" href="styles.css?v=20261016auth2">
-  <style>
-    .auth-page{min-height:100vh;overflow-x:hidden;background:radial-gradient(circle at 12% 0%,#fce3c7 0,transparent 38%),radial-gradient(circle at 92% 18%,#dfeaff 0,transparent 35%),#f7f8fb;display:grid;place-items:center;padding:28px 16px}.auth-shell{width:min(960px,100%);min-width:0;display:grid;grid-template-columns:1fr 1fr;overflow:hidden;border:1px solid #e5e9f0;border-radius:28px;background:#fff;box-shadow:0 24px 70px rgba(36,48,72,.13)}.auth-intro,.auth-card,.auth-form{min-width:0}.auth-intro{padding:54px 44px;background:linear-gradient(145deg,#14243f,#263d67);color:#fff;position:relative;overflow:hidden}.auth-intro:after{content:"";position:absolute;width:250px;height:250px;border-radius:50%;right:-100px;bottom:-90px;background:rgba(250,185,113,.22)}.auth-brand{display:inline-flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.03em}.auth-brand-mark{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:#f4b36d;color:#172640;font-size:20px}.auth-intro h1{font-size:42px;line-height:1.08;letter-spacing:-.04em;margin:74px 0 18px}.auth-intro p{max-width:300px;color:#ced8ea;line-height:1.8}.auth-points{display:grid;gap:13px;margin-top:44px;color:#eef3fb;font-size:13px}.auth-points span{display:flex;align-items:center;gap:9px}.auth-points i{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#375782;color:#f9c78d;font-style:normal}.auth-intro .daily-quote{margin-top:34px;max-width:320px;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16);box-shadow:none}.auth-intro .daily-quote-mark{color:#f4b36d}.auth-intro .daily-quote-label{color:#b8c9e5}.auth-intro .daily-quote-text{color:#f3f6fc}.auth-card{padding:44px 42px}.auth-card h2{font-size:25px;margin:0 0 8px;color:#182438}.auth-card-sub{color:#5f6b79;font-size:13px;margin:0 0 24px}.auth-tabs{display:grid;grid-template-columns:1fr 1fr;background:#f4f6f9;border-radius:12px;padding:4px;margin-bottom:23px}.auth-tabs button{border:0;background:transparent;border-radius:9px;padding:10px;color:#5f6b79;font:inherit;cursor:pointer}.auth-tabs button.is-active{background:#fff;color:#182438;box-shadow:0 2px 8px rgba(32,43,63,.08);font-weight:600}.auth-form{display:grid;gap:14px}.auth-form[hidden]{display:none}.auth-field{display:grid;gap:7px;color:#5c687a;font-size:13px}.auth-field input{width:100%;box-sizing:border-box;border:1px solid #e1e6ee;border-radius:11px;padding:12px 13px;font:inherit;color:#182438;background:#fbfcfe;outline:none;transition:border .2s,box-shadow .2s}.auth-field input:focus{border-color:#5577ae;box-shadow:0 0 0 3px rgba(85,119,174,.12)}.auth-code{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;min-width:0}.auth-code button{border:1px solid #d9e0eb;background:#fff;color:#395a88;border-radius:10px;padding:0 12px;cursor:pointer;white-space:nowrap}.auth-submit{width:100%;border:0;background:#253e68;color:#fff;border-radius:11px;padding:13px 16px;font:inherit;font-weight:600;cursor:pointer;box-shadow:0 8px 18px rgba(37,62,104,.2)}.auth-submit:disabled,.auth-code button:disabled{opacity:.55;cursor:wait}.auth-options{display:flex;justify-content:space-between;align-items:center;color:#5f6b79;font-size:12px}.auth-options label{display:flex;align-items:center;gap:7px}.auth-options input{accent-color:#395a88}.auth-message{min-height:20px;margin:1px 0 0;color:#718097;font-size:13px;line-height:1.5}.auth-message.error{color:#c25353}.auth-message.success{color:#3d8a62}.auth-foot{text-align:center;color:#687482;font-size:12px;margin-top:20px}.auth-foot a{color:#456999;text-decoration:none}@media(max-width:760px){.auth-shell{grid-template-columns:1fr;border-radius:20px}.auth-intro{padding:28px 26px}.auth-intro h1{font-size:34px;margin:35px 0 12px}.auth-points{margin-top:25px;grid-template-columns:1fr 1fr}.auth-card{padding:30px 24px}}
-  </style>
-  <style>.auth-back{border:0;background:transparent;color:#456999;font:inherit;font-size:13px;cursor:pointer;padding:3px}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#13213b">
+  <meta name="format-detection" content="telephone=no">
+  <title>登录 / 注册 · 月入万刀</title>
+  <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
+  <link rel="stylesheet" href="styles.css?v=20261017r1">
 </head>
-<body class="auth-page">
-  <main class="auth-shell">
-    <section class="auth-intro"><div class="auth-brand"><img class="auth-brand-logo" src="assets/iyesh-logo.webp" alt=""><span>月入万刀</span></div><h1>把经验，变成<br>可复用的增长。</h1><p>一个专注实战内容、会员权益与创作者分享的知识社区。</p><div class="auth-points"><span><i>✓</i>收藏筛选，随时找回灵感</span><span><i>✓</i>会员内容与积分权益</span><span><i>✓</i>发布你的方法与案例</span></div><div class="daily-quote" data-daily-quote aria-label="每日一语"><span class="daily-quote-mark" aria-hidden="true">“</span><div class="daily-quote-content"><span class="daily-quote-label">每日一语</span><span class="daily-quote-text" data-quote-text>把复杂的事做简单，行动会带来答案。</span></div></div></section>
-    <section class="auth-card"><h2 id="authTitle">欢迎回来</h2><p class="auth-card-sub" id="authSubtitle">登录后继续探索月入万刀</p><div class="auth-tabs" role="tablist" aria-label="账号操作"><button id="loginTab" type="button" role="tab" aria-selected="true" aria-controls="loginForm" class="is-active" data-mode="login">登录</button><button id="registerTab" type="button" role="tab" aria-selected="false" aria-controls="registerForm" data-mode="register">注册新账号</button></div>
-      <form id="loginForm" class="auth-form" role="tabpanel" aria-labelledby="loginTab"><label class="auth-field">用户名或邮箱<input name="identifier" autocomplete="username" required placeholder="输入用户名或邮箱"></label><label class="auth-field">密码<input name="password" type="password" autocomplete="current-password" required placeholder="输入密码"></label><div class="auth-options"><label><input name="remember" type="checkbox" checked> 30 天内免重复登录</label><a href="#" id="forgotLink">忘记密码？</a></div><button class="auth-submit" type="submit">登录月入万刀</button></form>
-      <form id="registerForm" class="auth-form" role="tabpanel" aria-labelledby="registerTab" hidden><label class="auth-field">用户名<input name="username" autocomplete="username" minlength="3" maxlength="24" required placeholder="3-24 位中文、字母或数字"></label><label class="auth-field">邮箱<input name="email" type="email" autocomplete="email" required placeholder="用于接收验证码"></label><label class="auth-field">邮箱验证码<div class="auth-code"><input name="code" inputmode="numeric" maxlength="6" required placeholder="6 位验证码"><button type="button" id="sendCodeBtn">获取验证码</button></div></label><label class="auth-field">设置密码<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required placeholder="至少 8 位字符"></label><label class="auth-field">确认密码<input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="72" required placeholder="再次输入密码"></label><button class="auth-submit" type="submit">创建我的账号</button></form>
-      <form id="resetForm" class="auth-form" role="tabpanel" aria-label="找回密码" hidden><label class="auth-field">注册邮箱<input name="email" type="email" autocomplete="email" required placeholder="输入注册时使用的邮箱"></label><label class="auth-field">邮箱验证码<div class="auth-code"><input name="code" inputmode="numeric" maxlength="6" required placeholder="6 位验证码"><button type="button" id="sendResetCodeBtn">获取验证码</button></div></label><label class="auth-field">新密码<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required placeholder="至少 8 位字符"></label><label class="auth-field">确认新密码<input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="72" required placeholder="再次输入新密码"></label><button class="auth-submit" type="submit">重置密码</button><button class="auth-back" type="button" id="backToLoginBtn">返回登录</button></form>
-      <p id="loginMessage" class="auth-message" role="status"></p><p class="auth-foot">继续即表示你同意社区服务规则 · <a href="index.html">先看看内容</a></p>
+<body data-page="login" data-skip-me>
+  <div class="auth-page">
+    <section class="band auth-brand">
+      <a class="brand" href="index.html" aria-label="返回月入万刀首页"><img src="assets/iyesh-logo.webp" alt="" width="32" height="32"><span>月入万刀</span></a>
+      <div>
+        <h1>把经验，变成<br>可复用的增长。</h1>
+        <p class="motto" data-daily-quote style="margin-top:14px"><span data-quote-text>把复杂的事做简单。</span></p>
+      </div>
+      <ul>
+        <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>按方向、技能和时间，找到能直接复制的 YouTube 打法</span></li>
+        <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>收藏与常用筛选，换设备也能接着看</span></li>
+        <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>发布你的案例，收获积分打赏与内容收入</span></li>
+      </ul>
     </section>
-  </main>
-  <script src="api-config.js?v=20261016api2"></script><script src="daily-quote.js"></script><script src="login.js?v=20261016auth2"></script>
+
+    <main class="auth-main">
+      <div class="auth-card">
+        <h2 id="authTitle">欢迎回来</h2>
+        <p id="authSubtitle">登录后继续阅读、收藏和发布内容</p>
+        <div class="segmented" role="tablist" aria-label="登录或注册" id="modeTabs">
+          <button type="button" role="tab" data-mode="login" aria-selected="true">登录</button>
+          <button type="button" role="tab" data-mode="register" aria-selected="false">注册</button>
+        </div>
+        <div class="inline-alert inline-alert--info" id="refNotice" hidden style="margin-bottom:16px"></div>
+
+        <form class="auth-form" id="loginForm" novalidate>
+          <div class="field"><label class="label" for="loginId">用户名或邮箱</label><input class="input" id="loginId" name="identifier" autocomplete="username" autocapitalize="off" spellcheck="false" required placeholder="输入用户名或邮箱"></div>
+          <div class="field"><label class="label" for="loginPassword">密码</label><div class="password-wrap"><input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" required placeholder="输入密码"><button type="button" data-toggle-password aria-label="显示密码" data-icon="eye"></button></div></div>
+          <div class="row"><label class="check"><input name="remember" type="checkbox" checked> 30 天内保持登录</label><button class="text-btn" type="button" data-mode="reset">忘记密码？</button></div>
+          <button class="btn btn--primary btn--lg btn--block" type="submit">登录</button>
+        </form>
+
+        <form class="auth-form" id="registerForm" novalidate hidden>
+          <div class="field"><label class="label" for="regName">用户名</label><input class="input" id="regName" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" minlength="3" maxlength="24" required placeholder="3–24 位中文、字母或数字"></div>
+          <div class="field"><label class="label" for="regEmail">邮箱</label><input class="input" id="regEmail" name="email" type="email" inputmode="email" autocomplete="email" required placeholder="用于接收验证码和找回密码"></div>
+          <div class="field"><label class="label" for="regCode">邮箱验证码</label><div class="input-group"><input class="input num" id="regCode" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required placeholder="6 位数字"><button class="btn" type="button" data-send-code="register">获取验证码</button></div></div>
+          <div class="field"><label class="label" for="regPassword">设置密码</label><div class="password-wrap"><input class="input" id="regPassword" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required placeholder="至少 8 位"><button type="button" data-toggle-password aria-label="显示密码" data-icon="eye"></button></div></div>
+          <button class="btn btn--primary btn--lg btn--block" type="submit">创建账号</button>
+        </form>
+
+        <form class="auth-form" id="resetForm" novalidate hidden>
+          <div class="field"><label class="label" for="resetEmail">注册邮箱</label><input class="input" id="resetEmail" name="email" type="email" inputmode="email" autocomplete="email" required placeholder="输入注册时的邮箱"></div>
+          <div class="field"><label class="label" for="resetCode">邮箱验证码</label><div class="input-group"><input class="input num" id="resetCode" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required placeholder="6 位数字"><button class="btn" type="button" data-send-code="reset">获取验证码</button></div></div>
+          <div class="field"><label class="label" for="resetPassword">新密码</label><div class="password-wrap"><input class="input" id="resetPassword" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required placeholder="至少 8 位"><button type="button" data-toggle-password aria-label="显示密码" data-icon="eye"></button></div></div>
+          <button class="btn btn--primary btn--lg btn--block" type="submit">重设密码</button>
+          <button class="btn btn--ghost btn--block" type="button" data-mode="login">返回登录</button>
+        </form>
+
+        <p class="auth-message" id="authMessage" role="status" aria-live="polite"></p>
+        <p class="auth-foot">登录即表示同意社区服务规则　<a href="index.html">先逛逛</a></p>
+      </div>
+    </main>
+  </div>
+
+  <script src="api-config.js?v=20261017r1"></script>
+  <script src="core.js?v=20261017r1"></script>
+  <script src="daily-quote.js?v=20261017r1"></script>
+  <script src="login.js?v=20261017r1"></script>
 </body>
 </html>

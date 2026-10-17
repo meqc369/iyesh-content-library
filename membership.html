@@ -1,68 +1,80 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>会员中心 · 月入万刀</title><link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
-  <link rel="stylesheet" href="styles.css">
-<style>
-  .membership-page{--member-ink:#172b4d;--member-muted:#66758c;--member-accent:#315ddd;background:#f5f7fb;overflow-x:hidden}
-  .membership-page .membership-shell{width:min(100%,1040px);max-width:none;padding-top:34px}
-  .membership-page .hero{align-items:center;margin-bottom:20px}
-  .membership-page .hero h1{color:var(--member-ink);font-size:34px;letter-spacing:-.03em}
-  .membership-page .member-status{border:1px solid #dce5f7;border-radius:999px;background:#f3f6ff;color:#315ddd;padding:9px 13px;white-space:nowrap}
-  .membership-page .plans{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}
-  .membership-page .plan-card{position:relative;gap:9px;border-color:#e1e7f0;border-radius:16px;padding:20px;background:#fff;box-shadow:0 7px 20px rgba(31,53,92,.045)}
-  .membership-page .plan-card:before{content:"";position:absolute;inset:0 0 auto;height:3px;border-radius:16px 16px 0 0;background:#315ddd}
-  .membership-page .plan-card h2{color:var(--member-ink);font-size:18px}
-  .membership-page .plan-card p{color:var(--member-muted);min-height:0;line-height:1.55}
-  .membership-page .plan-card strong{color:var(--member-ink);font-size:24px;line-height:1.25}
-  .membership-page .plan-card small{color:#7b899e}
-  .membership-page .plan-card button{background:var(--member-accent);border-radius:9px;box-shadow:0 7px 14px rgba(49,93,221,.15)}
-  .membership-page .plan-card button:hover{background:#284fc5}
-  .membership-page .plan-card .offline-action{background:#fff4df;border:1px solid #f0d8a7;color:#8a5a00;box-shadow:none}
-  .membership-page .detail-card{border-color:#e1e7f0;border-radius:16px;padding:20px;box-shadow:0 7px 20px rgba(31,53,92,.045)}
-  .membership-page .detail-card h2{color:var(--member-ink)}
-  .membership-page .point-unit-badge{background:#eef2ff;color:var(--member-accent)}
-  .membership-page .purchase-guide{padding:14px 0;gap:16px}
-  .membership-page .purchase-guide img{width:132px;height:132px;border-radius:12px;border-color:#e1e7f0}
-  .membership-page .purchase-guide-copy strong{color:var(--member-ink)}
-  .membership-page .purchase-guide-copy span{color:var(--member-muted);line-height:1.5}
-  .membership-page .purchase-guide-copy a{color:var(--member-accent)}
-  .membership-page .redeem-form{border-color:#ebeff5}
-  .membership-page .redeem-form input{border-color:#dbe3ee;background:#fbfcff;min-width:0}
-  .membership-page .redeem-form input:focus{border-color:#6d8af0;box-shadow:0 0 0 3px rgba(49,93,221,.12);outline:0}
-  .membership-page .redeem-form button{background:var(--member-accent);border-radius:9px}
-  .membership-page .offline-card{padding:17px 20px;border-color:#e1e7f0}
-  .membership-page .offline-icon{width:68px;height:50px;border-radius:12px;background:#fff4df;color:#8a5a00}
-  .membership-page .offline-card h2{color:var(--member-ink)}
-  .membership-page .offline-card p{color:var(--member-muted)}
-  .membership-page .orders-card{margin-bottom:0}
-  .membership-page .order-row{border-color:#ebeff5;color:#324966}
-  .membership-page .order-status{color:var(--member-muted)}
-  @media(max-width:760px){
-    .membership-page .membership-shell{padding:24px 14px 46px}
-    .membership-page .hero{align-items:flex-start;gap:10px}
-    .membership-page .hero h1{font-size:29px}
-    .membership-page .member-status{font-size:12px;padding:8px 10px}
-    .membership-page .plans{grid-template-columns:1fr;gap:11px}
-    .membership-page .plan-card{padding:18px 16px}
-    .membership-page .detail-card{padding:17px 14px;border-radius:14px}
-    .membership-page .purchase-guide{align-items:flex-start;flex-direction:row}
-    .membership-page .purchase-guide img{width:100px;height:100px}
-    .membership-page .purchase-guide-copy{min-width:0}
-    .membership-page .redeem-form{flex-direction:column;gap:9px}
-    .membership-page .redeem-form button{height:42px}
-    .membership-page .offline-card{align-items:flex-start;gap:11px}
-    .membership-page .offline-icon{width:58px;height:46px}
-  }
-  @media(max-width:390px){
-    .membership-page .membership-shell{padding-inline:10px}
-    .membership-page .hero{display:flex;flex-direction:column}
-    .membership-page .member-status{width:100%;border-radius:10px}
-    .membership-page .purchase-guide{flex-direction:column}
-    .membership-page .purchase-guide img{width:116px;height:116px}
-    .membership-page .order-row{grid-template-columns:minmax(0,1fr) auto;font-size:12px}
-    .membership-page .order-row>span:nth-child(2){display:none}
-  }
-</style>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#13213b">
+  <meta name="format-detection" content="telephone=no">
+  <title>会员中心 · 月入万刀</title>
+  <meta name="description" content="开通月入万刀会员，解锁全部会员专享的 YouTube 实战打法和资料。">
+  <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
+  <link rel="preload" href="assets/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css?v=20261017r1">
 </head>
-<body class="membership-page"><header class="topbar"><div class="brand"><img class="brand-logo" src="assets/iyesh-logo.webp" alt=""><span>月入万刀</span></div><nav class="primary-nav" aria-label="主导航"><a href="index.html">首页</a><a href="index.html">内容检索</a><a href="publish.html">发布内容</a><a class="active">会员中心</a></nav><div class="top-actions"><a class="avatar" href="profile.html" aria-label="个人中心">林</a></div></header><main class="shell membership-shell"><section class="hero"><div><h1>会员中心</h1></div><div><div id="memberStatus" class="member-status">正在加载…</div></div></section><section id="plans" class="plans"><p class="sub">正在加载会员等级…</p></section><section class="detail-card purchase-card"><div class="detail-head"><div><h2>购买积分 / 兑换码</h2></div><span id="purchaseUnit" class="point-unit-badge">积分</span></div><div id="purchaseGuide" class="purchase-guide"><p class="sub">正在加载购买方式…</p></div><form id="cdkeyRedeemForm" class="redeem-form"><label class="sr-only" for="cdkeyInput">积分兑换码</label><input id="cdkeyInput" name="code" autocomplete="off" placeholder="输入兑换码，例如 SC-XXXXX-XXXXXX-XXXXXX" required><button type="submit">兑换积分</button></form><p id="redeemMessage" class="sub"></p></section><section class="detail-card offline-card"><div class="offline-icon" id="offlineIcon">线下开通</div><div><h2 id="offlineTitle">线下开通</h2><p id="offlineNote">联系管理员完成收款，确认后立即生效。</p></div></section><section class="detail-card orders-card"><div class="detail-head"><h2>最近订单</h2><span id="orderMessage" class="sub"></span></div><div id="orders"><p class="sub">登录后查看订单。</p></div></section></main><div id="toast" class="toast"></div><script src="api-config.js?v=20261016api2"></script><script src="membership.js?v=20261016ui"></script>  <script src="nav.js"></script>
-</body></html>
+<body data-page="membership">
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="brand" href="index.html" aria-label="月入万刀首页"><img src="assets/iyesh-logo.webp" alt="" width="32" height="32"><span>月入万刀</span></a>
+      <nav class="site-nav" aria-label="主导航"><a href="index.html" data-nav="discover">发现</a><a href="membership.html" data-nav="membership">会员中心</a><a href="profile.html" data-nav="profile">个人中心</a></nav>
+      <div class="site-actions">
+        <a class="btn btn--primary btn--sm hide-mobile" href="publish.html" data-icon="plus">发布内容</a>
+        <a class="icon-btn hide-mobile" href="profile.html#messages" aria-label="消息" data-icon="bell"><span class="dot-badge" data-unread hidden></span></a>
+        <a class="account-link" href="login.html" data-account>登录</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-main">
+    <section class="band member-hero">
+      <div class="container">
+        <h1>开通会员，解锁全部会员专享打法</h1>
+        <p>会员内容持续更新。用积分开通，有效期内不限次数阅读。</p>
+        <div class="member-status" id="memberStatus">正在读取你的会员状态</div>
+      </div>
+    </section>
+
+    <div class="container">
+      <section class="plans" id="plans" aria-label="会员方案">
+        <div class="sheet plan"><div class="skeleton" style="height:22px;width:40%"></div><div class="skeleton" style="height:44px;width:60%"></div><div class="skeleton" style="height:14px;width:80%"></div></div>
+      </section>
+      <div id="returnHint"></div>
+
+      <div class="member-grid">
+        <section class="sheet panel" id="redeem" aria-labelledby="redeemTitle">
+          <div class="panel-head"><h2 id="redeemTitle">兑换码充值</h2><span class="tag tag--paid" id="balanceTag" hidden></span></div>
+          <form class="input-group" id="redeemForm">
+            <label class="sr-only" for="codeInput">兑换码</label>
+            <input class="input num" id="codeInput" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="输入兑换码，例如 SC-XXXXX-XXXXXX" required>
+            <button class="btn btn--money" type="submit">兑换</button>
+          </form>
+          <p class="hint" id="redeemMessage" style="margin-top:10px" role="status">兑换成功后积分立即到账，可用于开通会员、解锁内容和打赏。</p>
+          <h3 style="margin:22px 0 6px;font-size:15px">兑换记录</h3>
+          <div class="list" id="redeemList"><p class="hint">登录后查看兑换记录。</p></div>
+        </section>
+
+        <section class="sheet panel" aria-labelledby="howTitle">
+          <div class="panel-head"><h2 id="howTitle">怎么获取积分</h2></div>
+          <ol class="steps" id="steps">
+            <li><span><strong>添加客服微信</strong><span id="contactLine">说明你想购买的积分数量。</span></span></li>
+            <li><span><strong>付款后获得兑换码</strong><span id="offlineLine">客服确认收款后发给你一串兑换码。</span></span></li>
+            <li><span><strong>在本页输入兑换码</strong>积分立即到账，随时开通会员。</span></li>
+          </ol>
+          <div class="contact" id="contact" style="margin-top:20px" hidden></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <nav class="tabbar" aria-label="快捷导航">
+    <a href="index.html" data-nav="discover" data-icon="discover"><span>发现</span></a>
+    <a href="membership.html" data-nav="membership" data-icon="member"><span>会员</span></a>
+    <a href="publish.html" class="tab-publish" aria-label="发布内容"><span class="plus" data-icon="plus"></span><small>发布</small></a>
+    <a href="profile.html#messages" data-nav="messages" data-icon="bell"><span>消息</span><span class="dot-badge" data-unread hidden></span></a>
+    <a href="profile.html" data-nav="profile" data-icon="user"><span>我的</span></a>
+  </nav>
+
+  <script src="api-config.js?v=20261017r1"></script>
+  <script src="core.js?v=20261017r1"></script>
+  <script src="membership.js?v=20261017r1"></script>
+</body>
+</html>

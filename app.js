@@ -1,339 +1,337 @@
-let posts = [
-  { id: 'post_1', title: '累计开通 500+ YPP：YouTube 直播玩法开源', excerpt: '把选题、直播和复盘拆成一套可复制的流程，适合刚开始做内容出海的团队。', author: 'Gary', platform: 'YouTube', project: '出海', skill: 'AI', date: '1天前', publishedAt: '2026-10-13T08:00:00+08:00', digest: true, accessType: 'paid', priceCents: 990, counts: [44, 144, 4, 51] },
-  { id: 'post_2', title: '从 0 到 1 做一个垂直小号的完整记录', excerpt: '从定位、素材收集到发布节奏，分享一套低成本验证方法。', author: '小满', platform: '小红书', project: '垂直小号', skill: '自媒体', date: '2天前', publishedAt: '2026-10-12T08:00:00+08:00', digest: true, accessType: 'member', requiredPlanName: '创作者会员', counts: [31, 102, 12, 36] },
-  { id: 'post_3', title: 'AI 工作流如何接入日常内容生产', excerpt: '把调研、提纲、脚本和复盘串起来，减少重复劳动，把时间留给判断。', author: '林默', platform: '公众号', project: 'AI自媒体', skill: 'AI工作流', date: '3天前', publishedAt: '2026-10-11T08:00:00+08:00', digest: false, accessType: 'paid', priceCents: 900, counts: [18, 88, 7, 24] },
-  { id: 'post_4', title: '一套跨境电商素材管理方法', excerpt: '当素材数量变多后，如何按照市场、产品和投放阶段组织素材。', author: '周予', platform: 'TikTok', project: '电商', skill: 'AI视频', date: '5天前', publishedAt: '2026-10-09T08:00:00+08:00', digest: false, accessType: 'free', counts: [22, 64, 5, 19] },
-  { id: 'post_5', title: 'Codex 辅助项目开发的实践清单', excerpt: '从需求拆解到代码审查，记录一个真实项目中的协作方式。', author: '苏然', platform: 'X', project: 'AI产品开发', skill: 'Codex', date: '1周前', publishedAt: '2026-10-07T08:00:00+08:00', digest: true, accessType: 'member', requiredPlanName: '创作者会员', counts: [15, 73, 6, 28] },
-  { id: 'post_6', title: '做内容之前，先把用户问题说清楚', excerpt: '内容不是信息堆积，找到具体问题，才能让经验被真正使用。', author: '闻舟', platform: 'B站', project: '自媒体', skill: '生财认知', date: '1周前', publishedAt: '2026-10-07T06:00:00+08:00', digest: false, accessType: 'free', counts: [11, 51, 3, 16] }
-];
+/* 发现页：搜索、筛选、内容流、常用筛选 */
+(function () {
+  'use strict';
+  const { api, icon, escapeHtml, toast, relativeTime, compact, accessInfo, topicsOf, avatarHtml, session } = window.App;
 
-const filterGroups = [];
-const state = { platform: 'YouTube', keyword: '', tab: 'hot', date: 'all', sort: 'latest', mode: 'normal' };
-const query = new URLSearchParams(location.search);
-state.platform = 'YouTube';
-state.keyword = query.get('keyword') || state.keyword;
-state.tab = ['hot', 'digest', 'all'].includes(query.get('tab')) ? query.get('tab') : state.tab;
-state.sort = ['latest', 'oldest', 'favorites', 'comments', 'likes', 'anchors', 'anchor-latest'].includes(query.get('sort')) ? query.get('sort') : state.sort;
-state.date = ['all', 'yesterday', '3d', '7d', 'month', 'last-month', '3month'].includes(query.get('date')) ? query.get('date') : state.date;
-state.mode = ['normal', 'compact', 'streamline'].includes(query.get('mode')) ? query.get('mode') : state.mode;
-const counts = { hot: 1582, digest: 210, all: 405 };
-const cards = document.querySelector('#cards');
-const toastEl = document.querySelector('#toast');
-const apiBase = window.CONTENT_API_BASE || 'http://127.0.0.1:8787';
-const authHeaders = () => { const token = localStorage.getItem('accessToken'); return token ? { Authorization: `Bearer ${token}` } : {}; };
-const REQUEST_TIMEOUT_MS = 6500;
-async function fetchWithTimeout(url, options = {}, timeout = REQUEST_TIMEOUT_MS) { const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeout); try { return await fetch(url, { ...options, signal: controller.signal }); } catch (error) { if (error.name === 'AbortError') throw new Error('服务响应较慢，请稍后重试'); throw error; } finally { clearTimeout(timer); } }
-let remoteActive = false;
-let remoteTotal = null;
-let remoteTabTotals = null;
-let remoteNextCursor = null;
-let remoteLoading = false;
-let remoteError = '';
-let remoteRequestId = 0;
-let remoteTimer = null;
-const loadMoreBtn = document.querySelector('#loadMoreBtn');
+  const PLATFORM = 'YouTube';
+  const TABS = { hot: { tab: 'hot', sort: 'hot' }, latest: { tab: 'all', sort: 'latest' }, digest: { tab: 'digest', sort: 'latest' } };
+  const DATE_OPTIONS = [['all', '不限'], ['yesterday', '昨天'], ['3d', '近 3 天'], ['7d', '近 7 天'], ['month', '近一个月'], ['last-month', '上个月'], ['3month', '近三个月']];
+  const SORT_OPTIONS = [['', '跟随标签'], ['latest', '最新发布'], ['likes', '最多点赞'], ['favorites', '最多收藏'], ['comments', '最多评论'], ['anchors', '最多投锚'], ['oldest', '最早发布']];
+  const PAGE_SIZE = 20;
 
-function toast(message) {
-  toastEl.textContent = message;
-  toastEl.classList.add('show');
-  window.clearTimeout(toast.timer);
-  toast.timer = window.setTimeout(() => toastEl.classList.remove('show'), 1800);
-}
+  const params = new URLSearchParams(location.search);
+  const legacyTab = params.get('tab');
+  const state = {
+    view: ['hot', 'latest', 'digest'].includes(params.get('view')) ? params.get('view') : legacyTab === 'digest' ? 'digest' : legacyTab === 'all' ? 'latest' : 'hot',
+    keyword: params.get('keyword') || params.get('q') || '',
+    project: params.get('project') || '',
+    skill: params.get('skill') || '',
+    date: DATE_OPTIONS.some(([value]) => value === params.get('date')) ? params.get('date') : 'all',
+    sort: SORT_OPTIONS.some(([value]) => value && value === params.get('sort')) ? params.get('sort') : '',
+    mode: params.get('mode') === 'compact' || params.get('mode') === 'streamline' ? 'compact' : 'normal'
+  };
+  try { if (!params.get('mode') && localStorage.getItem('iyesh:feedMode') === 'compact') state.mode = 'compact'; } catch {}
 
-function syncUrl() {
-  const params = new URLSearchParams()
-  if (state.keyword) params.set('keyword', state.keyword)
-  if (state.tab !== 'hot') params.set('tab', state.tab)
-  if (state.date !== 'all') params.set('date', state.date)
-  if (state.sort !== 'latest') params.set('sort', state.sort)
-  if (state.mode !== 'normal') params.set('mode', state.mode)
-  history.replaceState(null, '', `${location.pathname}${params.toString() ? `?${params}` : ''}`)
-}
+  const feed = document.querySelector('#feed');
+  const keywordInput = document.querySelector('#keywordInput');
+  const searchForm = document.querySelector('#searchForm');
+  let tags = { project: [], skill: [] };
+  let items = [];
+  let cursor = null;
+  let hasMore = false;
+  let total = null;
+  let loading = false;
+  let requestId = 0;
+  let savedFilters = [];
+  let unitName = '积分';
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-}
-
-function accessMeta(post) {
-  const type = post.accessType || (post.memberOnly ? 'member' : post.priceCents ? 'paid' : 'free');
-  if (type === 'member') return { type, label: post.requiredPlanName ? `会员 · ${post.requiredPlanName}` : '会员专享', className: 'member-access' };
-  if (type === 'paid') return { type, label: `付费 · ${Number(post.pricePoints ?? post.priceCents ?? 0).toLocaleString()} ${post.priceUnitName || post.pointsUnitName || '积分'}`, className: 'paid-access' };
-  return { type: 'free', label: '免费', className: 'free-access' };
-}
-
-function filteredPosts() {
-  let list = [...posts];
-  if (state.keyword) {
-    const keyword = state.keyword.toLowerCase();
-    list = list.filter(post => [post.title, post.excerpt, post.author, post.platform, post.project, post.skill]
-      .some(value => String(value ?? '').toLowerCase().includes(keyword)));
+  /* ---------- url ---------- */
+  function syncUrl() {
+    const next = new URLSearchParams();
+    if (state.keyword) next.set('keyword', state.keyword);
+    if (state.view !== 'hot') next.set('view', state.view);
+    if (state.project) next.set('project', state.project);
+    if (state.skill) next.set('skill', state.skill);
+    if (state.date !== 'all') next.set('date', state.date);
+    if (state.sort) next.set('sort', state.sort);
+    if (state.mode !== 'normal') next.set('mode', state.mode);
+    const query = next.toString();
+    history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}`);
   }
-  if (state.platform !== '全部') list = list.filter(post => post.platform === state.platform);
-  if (state.date !== 'all') {
-    const end = new Date(); end.setHours(23, 59, 59, 999); const start = new Date(end);
-    if (state.date === 'yesterday') { start.setDate(start.getDate() - 1); start.setHours(0, 0, 0, 0); end.setDate(end.getDate() - 1); end.setHours(23, 59, 59, 999); }
-    if (state.date === '3d') start.setDate(start.getDate() - 2);
-    if (state.date === '7d') start.setDate(start.getDate() - 6);
-    if (state.date === 'month') start.setMonth(start.getMonth() - 1);
-    if (state.date === '3month') start.setMonth(start.getMonth() - 3);
-    if (state.date === 'last-month') { start.setMonth(start.getMonth() - 1, 1); start.setHours(0, 0, 0, 0); end.setDate(0); end.setHours(23, 59, 59, 999); }
-    list = list.filter(post => new Date(post.publishedAt) >= start && new Date(post.publishedAt) <= end);
+
+  function dateRange(value) {
+    if (value === 'all') return {};
+    const end = new Date(); end.setHours(23, 59, 59, 999);
+    const start = new Date(end); start.setHours(0, 0, 0, 0);
+    if (value === 'yesterday') { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); }
+    if (value === '3d') start.setDate(start.getDate() - 2);
+    if (value === '7d') start.setDate(start.getDate() - 6);
+    if (value === 'month') start.setMonth(start.getMonth() - 1);
+    if (value === '3month') start.setMonth(start.getMonth() - 3);
+    if (value === 'last-month') { start.setMonth(start.getMonth() - 1, 1); end.setDate(0); }
+    return { dateStart: start.toISOString(), dateEnd: end.toISOString() };
   }
-  if (state.tab === 'digest') list = list.filter(post => post.digest);
-  if (state.sort === 'oldest') list.reverse();
-  if (state.sort === 'likes') list.sort((a, b) => b.counts[1] - a.counts[1]);
-  if (state.sort === 'comments') list.sort((a, b) => b.counts[2] - a.counts[2]);
-  if (state.sort === 'favorites') list.sort((a, b) => b.counts[3] - a.counts[3]);
-  if (state.sort === 'anchors') list.sort((a, b) => b.counts[0] - a.counts[0]);
-  if (state.sort === 'anchor-latest') list.sort((a, b) => b.counts[0] - a.counts[0]);
-  return list;
-}
-
-function renderCard(post) {
-  const mode = state.mode;
-  const summary = mode === 'streamline' ? '' : `<p>${escapeHtml(post.excerpt)}</p>`;
-  const metrics = `<div class="meta"><span>⚓ ${post.counts[0]}</span><span>♡ ${post.counts[1]}</span><span>◌ ${post.counts[2]}</span><span>☆ ${post.counts[3]}</span></div>`;
-  const digest = post.digest ? '<span class="digest">精华</span>' : '';
-  const access = accessMeta(post);
-  return `<article class="card ${mode}" data-post-id="${escapeHtml(String(post.id))}"><div class="card-top"><span>${escapeHtml(post.author)}</span><span>·</span><span>${escapeHtml(post.date)}</span>${digest}<span class="access-badge ${access.className}">${escapeHtml(access.label)}</span></div><h2>${escapeHtml(post.title)}</h2>${summary}${metrics}<div class="card-tags"><button class="expand-card" type="button" data-expand-post="${escapeHtml(String(post.id))}">展开全文</button><button class="more-btn share-list-btn" aria-label="分享内容"><span aria-hidden="true">↗</span><span>分享</span></button></div></article>`;
-}
-
-function render() {
-  const list = filteredPosts();
-  const hasTag = [];
-  const hasNarrowFilter = state.keyword || state.date !== 'all';
-  const resultCount = remoteActive && remoteTotal !== null ? remoteTotal : (hasNarrowFilter ? list.length : counts[state.tab]);
-  document.querySelector('#resultCount').textContent = resultCount;
-  document.querySelector('#summaryCount').textContent = resultCount;
-  document.querySelector('#activeSummary').textContent = 'YouTube';
-  const errorHint = remoteError ? '<div class="remote-error" role="status"><span>在线内容暂时不可用，当前显示本地示例。</span><button type="button" data-retry-search>重试</button></div>' : '';
-  cards.innerHTML = errorHint + (list.length ? list.map(renderCard).join('') : '<div class="card empty-card"><p>没有找到匹配内容，试试清除筛选。</p></div>');
-  cards.className = `cards mode-${state.mode}`;
-  if (loadMoreBtn) {
-    loadMoreBtn.hidden = !remoteActive || !remoteNextCursor;
-    loadMoreBtn.disabled = remoteLoading;
-    loadMoreBtn.textContent = remoteLoading ? '正在加载…' : '加载更多';
+  function activeFilterCount() { return [state.project, state.skill, state.date !== 'all', state.sort].filter(Boolean).length; }
+  function filterLabel(filter = state) {
+    const parts = [filter.project, filter.skill, filter.date && filter.date !== 'all' ? DATE_OPTIONS.find(([value]) => value === filter.date)?.[1] : '', filter.keyword ? `“${filter.keyword}”` : ''].filter(Boolean);
+    const view = { hot: '推荐', latest: '最新', digest: '精华' }[filter.view || 'hot'];
+    return parts.length ? `${parts.join(' ')} ${view}` : `${view}内容`;
   }
-  document.querySelector('#hotCount').textContent = remoteActive && remoteTabTotals ? remoteTabTotals.hot : counts.hot;
-  document.querySelector('#digestCount').textContent = remoteActive && remoteTabTotals ? remoteTabTotals.digest : counts.digest;
-}
 
-function selectInGroup(group, value) {
-  state[group] = value;
-  document.querySelectorAll(`[data-group="${group}"] .chip`).forEach(button => button.classList.toggle('selected', button.dataset.value === value));
-  render(); syncUrl(); scheduleRemote();
-  toast(`已按“${value}”筛选`);
-}
-
-document.querySelectorAll('.chips').forEach(group => group.addEventListener('click', event => {
-  if (event.target.matches('.chip')) selectInGroup(group.dataset.group, event.target.dataset.value);
-}));
-
-document.querySelectorAll('.expand-btn').forEach(button => button.addEventListener('click', () => {
-  const group = button.dataset.expand;
-  if (button.dataset.expanded === 'true') {
-    expanded[group].forEach(value => document.querySelector(`[data-group="${group}"] [data-value="${CSS.escape(value)}"]`)?.remove());
-    if (expanded[group].includes(state[group])) { state[group] = '全部'; render(); syncUrl(); scheduleRemote(); }
-    button.textContent = '＋7';
-    button.dataset.expanded = 'false';
-    return;
+  /* ---------- rendering ---------- */
+  function renderTabs() {
+    document.querySelectorAll('#tabs [data-tab]').forEach(button => { const active = button.dataset.tab === state.view; button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1; });
+    document.querySelectorAll('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === state.mode)));
+    feed.classList.toggle('is-compact', state.mode === 'compact');
+    const count = activeFilterCount();
+    const badge = document.querySelector('#filterCount');
+    badge.hidden = !count; badge.textContent = String(count);
+    document.querySelectorAll('#quickTopics [data-topic]').forEach(chip => chip.setAttribute('aria-pressed', String(chip.dataset.topic === state.project)));
+    keywordInput.value = state.keyword;
+    searchForm.classList.toggle('has-value', Boolean(state.keyword));
+    const active = document.querySelector('#activeFilters');
+    const chips = [];
+    if (state.keyword) chips.push(['keyword', `搜索：${state.keyword}`]);
+    if (state.project) chips.push(['project', state.project]);
+    if (state.skill) chips.push(['skill', state.skill]);
+    if (state.date !== 'all') chips.push(['date', DATE_OPTIONS.find(([value]) => value === state.date)?.[1] || '']);
+    if (state.sort) chips.push(['sort', SORT_OPTIONS.find(([value]) => value === state.sort)?.[1] || '']);
+    active.hidden = !chips.length;
+    active.innerHTML = chips.map(([key, label]) => `<button class="chip" type="button" data-remove="${key}" aria-label="移除筛选：${escapeHtml(label)}">${escapeHtml(label)}${icon('x', 'x')}</button>`).join('') + (chips.length > 1 ? '<button class="text-btn is-muted" type="button" data-remove="all">全部清除</button>' : '');
   }
-  expanded[group].forEach(value => {
-    const item = document.createElement('button'); item.className = 'chip extra-chip'; item.dataset.value = value; item.textContent = value; button.before(item);
-  });
-  button.textContent = '收起'; button.dataset.expanded = 'true';
-}));
 
-document.querySelector('.tabs').addEventListener('click', event => {
-  const button = event.target.closest('.tab');
-  if (!button) return;
-  state.tab = button.dataset.value;
-  document.querySelectorAll('.tab').forEach(item => item.classList.toggle('selected', item === button));
-  render(); syncUrl(); scheduleRemote();
-});
-
-document.querySelector('#dateSelect').addEventListener('change', event => { state.date = event.target.value; render(); syncUrl(); scheduleRemote(); toast(`日期：${event.target.options[event.target.selectedIndex].text}`); });
-document.querySelector('#sortSelect').addEventListener('change', event => { state.sort = event.target.value; render(); syncUrl(); scheduleRemote(); });
-document.querySelector('#modeSelect').addEventListener('change', event => { state.mode = event.target.value; render(); syncUrl(); });
-document.querySelector('#keywordInput').addEventListener('input', event => { state.keyword = event.target.value.trim(); render(); syncUrl(); scheduleRemote(); });
-function syncProfileLink() {
-  const link = document.querySelector('#profileLink');
-  if (!link) return;
-  let user = null;
-  try { user = JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch {}
-  const name = user?.name || user?.nickname || '林';
-  link.textContent = name.slice(0, 1);
-  link.title = user ? `${name} · 个人中心` : '登录 / 个人中心';
-}
-syncProfileLink();
-document.querySelector('#profileLink')?.addEventListener('click', () => { window.location.href = 'profile.html'; });
-
-document.querySelector('#resetBtn').addEventListener('click', () => {
-  Object.assign(state, { platform: 'YouTube', keyword: '', tab: 'hot', date: 'all', sort: 'latest', mode: 'normal' });
-  document.querySelectorAll('.chip').forEach(button => button.classList.toggle('selected', button.dataset.value === 'YouTube'));
-  document.querySelectorAll('.tab').forEach(button => button.classList.toggle('selected', button.dataset.value === 'hot'));
-  document.querySelector('#dateSelect').value = 'all'; document.querySelector('#sortSelect').value = 'latest'; document.querySelector('#modeSelect').value = 'normal';
-  document.querySelector('#keywordInput').value = '';
-  render(); syncUrl(); scheduleRemote(); toast('筛选条件已清除');
-});
-
-const savedFilters = [];
-function renderSaved() {
-  document.querySelector('#savedCount').textContent = `${savedFilters.length}/7`;
-  document.querySelector('#savedFilters').innerHTML = savedFilters.length ? savedFilters.map((item, index) => `<button data-index="${index}">${escapeHtml(String(item.name))}</button>`).join('') : '<span class="empty">暂无常用筛选</span>';
-}
-document.querySelector('#saveFilterBtn').addEventListener('click', async () => {
-  if (savedFilters.length >= 7) return toast('最多保存 7 组常用筛选');
-  const name = 'YouTube 内容'; const filter = { ...state, platform: 'YouTube' };
-  try { const response = await fetchWithTimeout(`${apiBase}/api/v1/saved-filters`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders() }, body: JSON.stringify({ name, filter }) }); const remote = await response.json(); if (response.status === 401) { toast('请先登录后保存常用筛选'); window.location.href = `login.html?return=${encodeURIComponent(location.href)}`; return; } if (response.ok) savedFilters.push({ id: remote.id, name: remote.name, state: remote.filter }); else throw new Error(remote.message || '保存失败'); } catch (error) { toast(error.message || '常用筛选保存失败，请稍后重试'); return; }
-  renderSaved(); toast('已保存为常用筛选');
-});
-document.querySelector('#clearSaved').addEventListener('click', async () => { const items = [...savedFilters]; const results = await Promise.allSettled(items.filter(item => item.id).map(item => fetchWithTimeout(`${apiBase}/api/v1/saved-filters/${encodeURIComponent(item.id)}`, { method: 'DELETE', headers: authHeaders() }))); if (results.some(result => result.status === 'rejected' || !result.value.ok)) return toast('清空失败，原有筛选仍保留'); savedFilters.splice(0); renderSaved(); toast('常用筛选已清空'); });
-document.querySelector('#savedFilters').addEventListener('click', event => {
-  const button = event.target.closest('button'); if (!button) return;
-  Object.assign(state, savedFilters[Number(button.dataset.index)].state, { platform: 'YouTube' });
-  filterGroups.forEach(group => document.querySelectorAll(`[data-group="${group}"] .chip`).forEach(item => item.classList.toggle('selected', item.dataset.value === state[group])));
-  document.querySelector('#dateSelect').value = state.date; document.querySelector('#sortSelect').value = state.sort; document.querySelector('#modeSelect').value = state.mode;
-  document.querySelectorAll('.tab').forEach(item => item.classList.toggle('selected', item.dataset.value === state.tab));
-  render(); syncUrl(); scheduleRemote(); toast('已应用常用筛选');
-});
-loadMoreBtn?.addEventListener('click', () => loadRemote(true));
-cards.addEventListener('click', async event => {
-  if (event.target.closest('[data-retry-search]')) {
-    event.stopPropagation();
-    loadRemote(false);
-    return;
+  function itemHtml(post) {
+    const access = accessInfo(post, unitName);
+    const author = typeof post.author === 'string' ? { name: post.author } : (post.author || {});
+    const counts = post.counts || {};
+    const url = `detail.html?id=${encodeURIComponent(post.id)}`;
+    const topics = topicsOf(post);
+    const thumb = post.thumbnail || post.coverImage;
+    const showThumb = Boolean(thumb) && state.mode !== 'compact';
+    return `<article class="feed-item${showThumb ? ' has-thumb' : ''}" data-id="${escapeHtml(post.id)}">
+      <div class="feed-item__main">
+        <div class="feed-item__meta">${avatarHtml(author)}<span class="author">${escapeHtml(author.name || '用户')}</span><time datetime="${escapeHtml(post.publishedAt || '')}">${escapeHtml(relativeTime(post.publishedAt) || '')}</time>${access.html}</div>
+        <h2>${post.digest ? '<span class="tag tag--digest">精华</span>' : ''}<a href="${url}">${escapeHtml(post.title)}</a></h2>
+        ${post.excerpt ? `<p class="feed-item__excerpt">${escapeHtml(post.excerpt)}</p>` : ''}
+        <div class="feed-item__foot">
+          <span class="stat" title="点赞">${icon('heart')}<span class="num">${compact(counts.likes)}</span></span>
+          <span class="stat" title="评论">${icon('comment')}<span class="num">${compact(counts.comments)}</span></span>
+          <span class="stat" title="收藏">${icon('star')}<span class="num">${compact(counts.favorites)}</span></span>
+          ${topics.length ? `<span class="topics">${topics.map(topic => `<span>${escapeHtml(topic)}</span>`).join('')}</span>` : ''}
+          <button class="share" type="button" data-share="${escapeHtml(post.id)}" aria-label="分享《${escapeHtml(post.title)}》">${icon('share')}</button>
+        </div>
+      </div>
+      ${showThumb ? `<a class="feed-item__thumb" href="${url}" tabindex="-1" aria-hidden="true"><img src="${escapeHtml(window.App.mediaUrl(thumb))}" alt="" loading="lazy"></a>` : ''}
+    </article>`;
   }
-  const expandButton = event.target.closest('.expand-card');
-  if (expandButton) {
-    event.stopPropagation();
-    const card = expandButton.closest('[data-post-id]');
-    if (card.dataset.expanded === 'true') {
-      card.querySelector('.inline-content')?.remove();
-      card.dataset.expanded = 'false';
-      expandButton.textContent = '展开全文';
+  function skeletonHtml(count = 4) {
+    return Array.from({ length: count }, () => '<div class="feed-item feed-item--skeleton" aria-hidden="true"><div class="feed-item__main"><div class="skeleton" style="width:38%"></div><div class="skeleton" style="height:20px;width:86%"></div><div class="skeleton" style="width:72%"></div><div class="skeleton" style="width:30%"></div></div></div>').join('');
+  }
+  function renderFeed({ error = '' } = {}) {
+    feed.setAttribute('aria-busy', String(loading));
+    if (loading && !items.length) { feed.innerHTML = skeletonHtml(); return; }
+    if (error && !items.length) {
+      feed.innerHTML = `<div class="empty">${icon('alert')}<strong>内容暂时没有加载出来</strong><p>${escapeHtml(error)}</p><button class="btn btn--sm" type="button" data-retry>重新加载</button></div>`;
       return;
     }
-    expandButton.disabled = true;
-    let content = '';
-    let locked = false;
-    let lockedPost = null;
+    if (!items.length) {
+      const filtered = activeFilterCount() || state.keyword || state.view === 'digest';
+      feed.innerHTML = `<div class="empty">${icon('search')}<strong>${filtered ? '没有符合条件的内容' : '这里还没有内容'}</strong><p>${filtered ? '换个关键词，或减少一些筛选条件再试试。' : '第一篇实战经验，可以由你来写。'}</p>${filtered ? '<button class="btn btn--sm" type="button" data-remove="all">清除筛选</button>' : '<a class="btn btn--primary btn--sm" href="publish.html">发布内容</a>'}</div>`;
+      return;
+    }
+    feed.innerHTML = items.map(itemHtml).join('') + (hasMore
+      ? `<div class="feed-more" id="feedMore"><button class="btn btn--sm${loading ? ' is-loading' : ''}" type="button" data-more>加载更多</button></div>`
+      : `<div class="feed-end">${error ? `<button class="text-btn" type="button" data-more>${escapeHtml(error)}，点击重试</button>` : `已显示全部 ${items.length} 篇`}</div>`);
+    observeMore();
+  }
+  function renderCount() {
+    const node = document.querySelector('#heroCount');
+    if (total === null) return;
+    node.innerHTML = state.keyword || activeFilterCount() || state.view === 'digest'
+      ? `找到 <span class="num">${total}</span> 篇相关内容`
+      : `已收录 <span class="num">${total}</span> 篇实战内容`;
+  }
+
+  /* ---------- data ---------- */
+  async function load(append = false) {
+    const id = ++requestId;
+    loading = true;
+    if (!append) { items = []; cursor = null; hasMore = false; }
+    renderFeed();
+    const view = TABS[state.view];
     try {
-      const response = await fetchWithTimeout(`${apiBase}/api/v1/posts/${encodeURIComponent(card.dataset.postId)}`);
-      if (response.ok) {
-        lockedPost = await response.json();
-        locked = Boolean(lockedPost.locked);
-        content = String(lockedPost.content || '');
-      }
-    } catch {}
-    if (locked) {
-      const access = accessMeta(lockedPost || {});
-      content = `<div class="inline-paywall"><strong>${access.type === 'member' ? '会员专享内容' : '积分购买后查看'}</strong><span>${access.type === 'member' ? `开通${escapeHtml(lockedPost?.requiredPlanName || '会员')}即可阅读` : `需要 ${Number(lockedPost?.pricePoints ?? lockedPost?.priceCents ?? 0).toLocaleString()} ${escapeHtml(lockedPost?.priceUnitName || '积分')}`}</span><button type="button" class="paywall-action" data-paywall-post="${escapeHtml(card.dataset.postId)}">${access.type === 'member' ? '开通会员' : '去购买'}</button></div>`;
+      const body = await api('/api/v1/posts/search', { method: 'POST', body: { keyword: state.keyword, platformId: PLATFORM, projectId: state.project || undefined, skillId: state.skill || undefined, tab: view.tab, sort: state.sort || view.sort, pageSize: PAGE_SIZE, cursor: append ? cursor : null, ...dateRange(state.date) } });
+      if (id !== requestId) return;
+      items = append ? items.concat(body.items || []) : (body.items || []);
+      cursor = body.nextCursor || null;
+      hasMore = Boolean(body.hasMore && cursor);
+      total = Number(body.total || 0);
+      loading = false;
+      renderFeed();
+      renderCount();
+    } catch (error) {
+      if (id !== requestId) return;
+      loading = false;
+      renderFeed({ error: error.message });
     }
-    if (!content) {
-      const local = posts.find(post => String(post.id) === card.dataset.postId);
-      if (local && (local.locked || accessMeta(local).type !== 'free')) {
-        const access = accessMeta(local);
-        content = `<div class="inline-paywall"><strong>${access.type === 'member' ? '会员专享内容' : '积分购买后查看'}</strong><span>${access.type === 'member' ? `开通${escapeHtml(local.requiredPlanName || '会员')}即可阅读` : `需要 ${Number(local.pricePoints ?? local.priceCents ?? 0).toLocaleString()} ${escapeHtml(local.priceUnitName || '积分')}`}</span><button type="button" class="paywall-action" data-paywall-post="${escapeHtml(card.dataset.postId)}">${access.type === 'member' ? '开通会员' : '去购买'}</button></div>`;
-      } else content = `<p>${escapeHtml(String(local?.excerpt || '暂无正文'))}</p>`;
-    }
+  }
+  const reload = () => { syncUrl(); renderTabs(); load(false); };
+
+  let moreObserver;
+  function observeMore() {
+    const target = document.querySelector('#feedMore');
+    if (!target || !('IntersectionObserver' in window)) return;
+    moreObserver?.disconnect();
+    moreObserver = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && hasMore && !loading) load(true); }, { rootMargin: '400px 0px' });
+    moreObserver.observe(target);
+  }
+
+  async function loadTags() {
+    const [projects, skills] = await Promise.allSettled([api('/api/v1/tags?dimension=project', { auth: false }), api('/api/v1/tags?dimension=skill', { auth: false })]);
+    tags = { project: projects.status === 'fulfilled' ? (projects.value.items || []).map(item => item.name) : [], skill: skills.status === 'fulfilled' ? (skills.value.items || []).map(item => item.name) : [] };
+    document.querySelector('#quickTopics').innerHTML = tags.project.slice(0, 8).map(name => `<button class="chip" type="button" data-topic="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join('');
+    renderTabs();
+  }
+  async function loadUnit() { try { const config = await api('/api/v1/points/config', { auth: false }); unitName = config.unitName || unitName; } catch {} }
+
+  /* ---------- saved filters ---------- */
+  function renderSaved() {
+    const list = document.querySelector('#savedFilters');
+    const count = document.querySelector('#savedCount');
+    if (!session.loggedIn()) { count.textContent = ''; list.innerHTML = `<p class="hint">登录后可以保存最多 7 组筛选，下次一键打开。</p><a class="btn btn--sm" href="${window.App.loginUrl()}">登录</a>`; return; }
+    count.textContent = `${savedFilters.length}/7`;
+    list.innerHTML = savedFilters.length
+      ? savedFilters.map((item, index) => `<div class="saved-item"><button class="apply" type="button" data-apply="${index}">${escapeHtml(item.name)}</button><button class="remove" type="button" data-delete="${index}" aria-label="删除常用筛选 ${escapeHtml(item.name)}">${icon('x')}</button></div>`).join('')
+      : '<p class="hint">在“筛选”里设好条件，点“存为常用”，就会出现在这里。</p>';
+  }
+  async function loadSaved() {
+    if (!session.loggedIn()) { renderSaved(); return; }
+    try { const body = await api('/api/v1/saved-filters'); savedFilters = body.items || []; } catch { savedFilters = []; }
+    renderSaved();
+  }
+  function applyFilter(filter = {}) {
+    const legacyView = filter.tab === 'digest' ? 'digest' : filter.tab === 'all' ? 'latest' : 'hot';
+    Object.assign(state, {
+      view: ['hot', 'latest', 'digest'].includes(filter.view) ? filter.view : legacyView,
+      keyword: filter.keyword || '',
+      project: filter.project || '',
+      skill: filter.skill || '',
+      date: DATE_OPTIONS.some(([value]) => value === filter.date) ? filter.date : 'all',
+      sort: SORT_OPTIONS.some(([value]) => value && value === filter.sort) && !(filter.sort === 'latest' && !filter.view) ? filter.sort : '',
+      mode: filter.mode === 'compact' ? 'compact' : state.mode
+    });
+    reload();
+  }
+  async function saveCurrentFilter() {
+    if (!session.loggedIn()) { window.App.goLogin(); return; }
+    if (savedFilters.length >= 7) { toast('最多保存 7 组常用筛选，请先删除一组', 'error'); return; }
+    const name = await window.App.prompt({ title: '存为常用筛选', label: '名称', value: filterLabel().slice(0, 30), maxLength: 30, confirmText: '保存' });
+    if (!name) return;
+    try {
+      const item = await api('/api/v1/saved-filters', { method: 'POST', body: { name, filter: { ...state, platform: PLATFORM, tab: TABS[state.view].tab } } });
+      savedFilters.push(item); renderSaved(); toast('已存为常用筛选', 'success');
+    } catch (error) { toast(error.message, 'error'); }
+  }
+
+  /* ---------- filter sheet ---------- */
+  function openFilterSheet() {
+    const draft = { project: state.project, skill: state.skill, date: state.date, sort: state.sort, mode: state.mode };
+    const group = (title, key, options) => `<section class="filter-group"><h3>${title}</h3><div class="chip-row">${options.map(([value, label]) => `<button class="chip" type="button" data-key="${key}" data-value="${escapeHtml(value)}" aria-pressed="${String(draft[key] === value)}">${escapeHtml(label)}</button>`).join('')}</div></section>`;
     const body = document.createElement('div');
-    body.className = 'inline-content';
-    body.innerHTML = content;
-    card.querySelector('h2')?.after(body);
-    card.dataset.expanded = 'true';
-    expandButton.disabled = false;
-    expandButton.textContent = '收起全文';
-    return;
+    const render = () => {
+      body.innerHTML = [
+        tags.project.length ? group('方向', 'project', [['', '全部'], ...tags.project.map(name => [name, name])]) : '',
+        tags.skill.length ? group('技能', 'skill', [['', '全部'], ...tags.skill.map(name => [name, name])]) : '',
+        group('发布时间', 'date', DATE_OPTIONS),
+        group('排序', 'sort', SORT_OPTIONS),
+        group('阅读模式', 'mode', [['normal', '常规'], ['compact', '精简']])
+      ].join('');
+    };
+    render();
+    body.addEventListener('click', event => {
+      const chip = event.target.closest('[data-key]');
+      if (!chip) return;
+      draft[chip.dataset.key] = chip.dataset.value;
+      body.querySelectorAll(`[data-key="${chip.dataset.key}"]`).forEach(item => item.setAttribute('aria-pressed', String(item === chip)));
+    });
+    window.App.modal({
+      title: '筛选内容',
+      body,
+      wide: true,
+      actions: [
+        { label: '存为常用', onClick: async ({ close }) => { Object.assign(state, draft); syncUrl(); renderTabs(); close(null); load(false); await saveCurrentFilter(); return false; } },
+        { label: '重置', onClick: () => { Object.assign(draft, { project: '', skill: '', date: 'all', sort: '', mode: 'normal' }); render(); return false; } },
+        { label: '查看结果', primary: true, onClick: () => { Object.assign(state, draft); try { localStorage.setItem('iyesh:feedMode', state.mode); } catch {} reload(); } }
+      ]
+    });
   }
-  const paywallButton = event.target.closest('.paywall-action');
-  if (paywallButton) {
-    event.stopPropagation();
-    window.location.href = `detail.html?id=${encodeURIComponent(paywallButton.dataset.paywallPost)}`;
-    return;
-  }
-  const moreButton = event.target.closest('.more-btn');
-  if (moreButton) {
-    event.stopPropagation();
-    const card = moreButton.closest('[data-post-id]');
-    const post = posts.find(item => String(item.id) === String(card?.dataset.postId)) || {};
-    const postId = card?.dataset.postId || '';
-    const url = typeof window.shareUrlForPost === 'function'
-      ? window.shareUrlForPost(postId)
-      : new URL(`detail.html?id=${encodeURIComponent(postId)}`, location.href).href;
-    if (typeof window.openShareSheet === 'function') {
-      window.openShareSheet({ title: post.title, excerpt: post.excerpt, platform: post.platform, author: post.author, cover: post.coverImage, url });
-    } else {
-      try { await navigator.clipboard.writeText(url); toast('内容链接已复制'); } catch { window.prompt('复制内容链接', url); }
+
+  /* ---------- events ---------- */
+  document.querySelector('#tabs').addEventListener('click', event => {
+    const button = event.target.closest('[data-tab]');
+    if (!button || button.dataset.tab === state.view) return;
+    state.view = button.dataset.tab;
+    reload();
+  });
+  document.querySelector('#tabs').addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    const order = ['hot', 'latest', 'digest'];
+    const next = order[(order.indexOf(state.view) + (event.key === 'ArrowRight' ? 1 : 2)) % 3];
+    state.view = next; reload();
+    document.querySelector(`#tabs [data-tab="${next}"]`)?.focus();
+  });
+  document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', () => {
+    state.mode = button.dataset.mode;
+    try { localStorage.setItem('iyesh:feedMode', state.mode); } catch {}
+    syncUrl(); renderTabs(); renderFeed();
+  }));
+  document.querySelector('#openFilters').addEventListener('click', openFilterSheet);
+  searchForm.addEventListener('submit', event => {
+    event.preventDefault();
+    state.keyword = keywordInput.value.trim();
+    keywordInput.blur();
+    reload();
+    document.querySelector('#filterbar').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  keywordInput.addEventListener('input', () => searchForm.classList.toggle('has-value', Boolean(keywordInput.value)));
+  document.querySelector('#clearKeyword').addEventListener('click', () => { keywordInput.value = ''; searchForm.classList.remove('has-value'); if (state.keyword) { state.keyword = ''; reload(); } keywordInput.focus(); });
+  document.querySelector('#quickTopics').addEventListener('click', event => {
+    const chip = event.target.closest('[data-topic]');
+    if (!chip) return;
+    state.project = state.project === chip.dataset.topic ? '' : chip.dataset.topic;
+    reload();
+  });
+  document.addEventListener('click', event => {
+    const remove = event.target.closest('[data-remove]');
+    if (remove) {
+      const key = remove.dataset.remove;
+      if (key === 'all') Object.assign(state, { keyword: '', project: '', skill: '', date: 'all', sort: '' });
+      else if (key === 'date') state.date = 'all';
+      else state[key] = '';
+      reload();
+      return;
     }
-    return;
+    if (event.target.closest('[data-retry]')) { load(false); return; }
+    if (event.target.closest('[data-more]')) { if (!loading) load(true); return; }
+    const shareButton = event.target.closest('[data-share]');
+    if (shareButton) {
+      const post = items.find(item => String(item.id) === shareButton.dataset.share);
+      if (!post) return;
+      const author = typeof post.author === 'string' ? { name: post.author } : post.author;
+      const access = accessInfo(post, unitName);
+      window.Share.open({ id: post.id, title: post.title, excerpt: post.excerpt, author, cover: post.thumbnail || post.coverImage, topics: topicsOf(post), access: { type: access.type, price: access.price, unit: access.unit }, dateText: window.App.dateText(post.publishedAt) });
+    }
+  });
+  document.querySelector('#savedFilters').addEventListener('click', async event => {
+    const apply = event.target.closest('[data-apply]');
+    if (apply) { const item = savedFilters[Number(apply.dataset.apply)]; if (item) { applyFilter(item.filter || {}); toast(`已打开：${item.name}`); } return; }
+    const remove = event.target.closest('[data-delete]');
+    if (remove) {
+      const item = savedFilters[Number(remove.dataset.delete)];
+      if (!item || !(await window.App.confirm({ title: '删除常用筛选', message: `确定删除“${item.name}”吗？`, confirmText: '删除', danger: true }))) return;
+      try { await api(`/api/v1/saved-filters/${encodeURIComponent(item.id)}`, { method: 'DELETE' }); savedFilters = savedFilters.filter(entry => entry !== item); renderSaved(); toast('已删除', 'success'); }
+      catch (error) { toast(error.message, 'error'); }
+    }
+  });
+  const filterbar = document.querySelector('#filterbar');
+  if ('IntersectionObserver' in window) {
+    const sentinel = document.createElement('div');
+    filterbar.before(sentinel);
+    new IntersectionObserver(([entry]) => filterbar.classList.toggle('is-stuck', !entry.isIntersecting), { rootMargin: '-64px 0px 0px 0px' }).observe(sentinel);
   }
-  const card = event.target.closest('[data-post-id]');
-  if (card) window.location.href = `detail.html?id=${encodeURIComponent(card.dataset.postId)}`;
-});
 
-renderSaved();
-filterGroups.forEach(group => document.querySelectorAll(`[data-group="${group}"] .chip`).forEach(item => item.classList.toggle('selected', item.dataset.value === state[group])));
-document.querySelectorAll('.tab').forEach(item => item.classList.toggle('selected', item.dataset.value === state.tab));
-document.querySelector('#keywordInput').value = state.keyword;
-document.querySelector('#dateSelect').value = state.date;
-document.querySelector('#sortSelect').value = state.sort;
-document.querySelector('#modeSelect').value = state.mode;
-render();
-async function loadSavedFilters() { try { const response = await fetchWithTimeout(`${apiBase}/api/v1/saved-filters`, { headers: authHeaders() }); const body = await response.json(); if (response.ok && Array.isArray(body.items)) { savedFilters.splice(0, savedFilters.length, ...body.items.map(item => ({ id: item.id, name: item.name, state: item.filter }))); renderSaved(); } } catch {} }
-loadSavedFilters();
-
-function remoteDateRange(value) {
-  if (value === 'all') return {};
-  const end = new Date(); end.setHours(23, 59, 59, 999); const start = new Date(end);
-  if (value === 'yesterday') { start.setDate(start.getDate() - 1); start.setHours(0, 0, 0, 0); end.setDate(end.getDate() - 1); end.setHours(23, 59, 59, 999); }
-  if (value === '3d') start.setDate(start.getDate() - 2);
-  if (value === '7d') start.setDate(start.getDate() - 6);
-  if (value === 'month') start.setMonth(start.getMonth() - 1);
-  if (value === '3month') start.setMonth(start.getMonth() - 3);
-  if (value === 'last-month') { start.setMonth(start.getMonth() - 1, 1); start.setHours(0, 0, 0, 0); end.setDate(0); end.setHours(23, 59, 59, 999); }
-  return { dateStart: start.toISOString(), dateEnd: end.toISOString() };
-}
-function scheduleRemote() { window.clearTimeout(remoteTimer); remoteTimer = window.setTimeout(() => loadRemote(false), 120); }
-async function loadRemote(append = false) {
-  const requestId = ++remoteRequestId;
-  remoteLoading = true;
-  remoteError = '';
-  if (!append) remoteNextCursor = null;
-  render();
-  try {
-    const response = await fetchWithTimeout(`${apiBase}/api/v1/posts/search`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders() }, body: JSON.stringify({ keyword: state.keyword, platformId: state.platform, tab: state.tab, sort: state.sort, pageSize: 50, cursor: append ? remoteNextCursor : null, ...remoteDateRange(state.date) }) });
-    if (!response.ok) throw new Error('search failed');
-    const body = await response.json();
-    if (requestId !== remoteRequestId) return;
-    const mapped = (body.items || []).map(item => ({
-      title: String(item.title ?? ''),
-      excerpt: String(item.excerpt ?? ''),
-      author: String(item.author?.name ?? item.author ?? ''),
-      platform: String(item.platform ?? ''),
-      project: String(item.project ?? ''),
-      skill: String(item.skill ?? ''),
-      date: item.date || (item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('zh-CN') : ''),
-      publishedAt: item.publishedAt || '',
-      digest: Boolean(item.digest),
-      accessType: item.accessType || (item.memberOnly ? 'member' : (item.pricePoints ?? item.priceCents) ? 'paid' : 'free'),
-      pricePoints: Number(item.pricePoints ?? item.priceCents ?? 0),
-      priceUnitName: item.priceUnitName || '积分',
-      requiredPlanName: item.requiredPlanName || item.requiredPlan?.name || '',
-      coverImage: item.coverImage || item.cover || '',
-      locked: Boolean(item.locked),
-      counts: [Number(item.counts?.anchors || 0), Number(item.counts?.likes || 0), Number(item.counts?.comments || 0), Number(item.counts?.favorites || 0)],
-      id: item.id
-    }));
-    posts = append ? [...posts, ...mapped] : mapped;
-    remoteTotal = Number(body.total || 0); remoteTabTotals = body.tabTotals || null; remoteActive = true; render();
-    remoteNextCursor = body.nextCursor || null;
-  } catch {
-    if (requestId !== remoteRequestId) return;
-    remoteError = 'search-unavailable';
-    if (!append) { remoteActive = false; remoteTotal = null; remoteTabTotals = null; remoteNextCursor = null; }
-  } finally {
-    if (requestId === remoteRequestId) { remoteLoading = false; render(); }
-  }
-}
-loadRemote();
+  renderTabs();
+  loadUnit().finally(() => load(false));
+  loadTags();
+  loadSaved();
+})();

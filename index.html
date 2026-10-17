@@ -2,39 +2,104 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>内容检索 · 月入万刀</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#13213b">
+  <meta name="format-detection" content="telephone=no">
+  <title>发现 · 月入万刀</title>
+  <meta name="description" content="月入万刀：YouTube 出海与内容变现的实战打法库，按方向、技能和时间找到能直接复制的经验。">
   <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="apple-touch-icon" href="assets/iyesh-favicon.png">
+  <link rel="preload" href="assets/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css?v=20261017r1">
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand"><img class="brand-logo" src="assets/iyesh-logo.webp" alt=""><span>月入万刀</span></div>
-    <nav class="primary-nav" aria-label="主导航"><a href="index.html">首页</a><a class="active">内容检索</a><a href="publish.html">发布内容</a><a href="membership.html">会员中心</a></nav>
-    <div class="top-actions"><label class="global-search"><span>⌕</span><input id="keywordInput" type="search" placeholder="搜索标题、作者、标签" aria-label="搜索标题、作者、标签"></label><a id="profileLink" class="avatar" href="profile.html" aria-label="个人中心">林</a></div>
+<body data-page="discover">
+  <a class="sr-only" href="#feed">跳到内容列表</a>
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="brand" href="index.html" aria-label="月入万刀首页"><img src="assets/iyesh-logo.webp" alt="" width="32" height="32"><span>月入万刀</span></a>
+      <nav class="site-nav" aria-label="主导航"><a href="index.html" data-nav="discover">发现</a><a href="membership.html" data-nav="membership">会员中心</a><a href="profile.html" data-nav="profile">个人中心</a></nav>
+      <div class="site-actions">
+        <a class="btn btn--primary btn--sm hide-mobile" href="publish.html" data-icon="plus">发布内容</a>
+        <a class="icon-btn hide-mobile" href="profile.html#messages" aria-label="消息" data-icon="bell"><span class="dot-badge" data-unread hidden></span></a>
+        <a class="account-link" href="login.html" data-account>登录</a>
+      </div>
+    </div>
   </header>
 
-  <main class="shell">
-    <section class="hero">
-      <div><h1>内容检索</h1></div>
-      <aside class="daily-quote" data-daily-quote aria-label="每日一语"><span class="daily-quote-mark" aria-hidden="true">“</span><div class="daily-quote-content"><span class="daily-quote-label">每日一语</span><span class="daily-quote-text" data-quote-text>把复杂的事做简单，行动会带来答案。</span></div></aside><div class="hero-stat"><strong id="resultCount">1582</strong><span>篇相关内容</span></div>
+  <main class="page-main">
+    <section class="band discover-hero">
+      <div class="container">
+        <p class="motto" data-daily-quote><span data-quote-text>把复杂的事做简单，行动会带来答案。</span></p>
+        <h1><span class="phrase">找到下一条能直接复制的</span> <span class="phrase">YouTube 赚钱打法</span></h1>
+        <form class="hero-search" id="searchForm" role="search">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="keywordInput" type="search" enterkeyhint="search" autocomplete="off" placeholder="搜索标题、作者或关键词" aria-label="搜索内容">
+          <button class="clear" type="button" id="clearKeyword" aria-label="清除搜索词" data-icon="x"></button>
+          <button class="btn btn--primary btn--sm" type="submit">搜索</button>
+        </form>
+        <div class="hero-quick"><span>热门方向</span><div class="chip-scroll" id="quickTopics"></div></div>
+        <p class="hero-count" id="heroCount">正在整理内容</p>
+      </div>
     </section>
 
-    <section class="filters" aria-label="筛选条件">
-      <div class="filter-head"><div class="filter-title">筛选条件</div><div><button id="saveFilterBtn" class="save-btn">＋ 存为常用</button><button id="resetBtn" class="reset">清除筛选</button></div></div>
-      <div class="filter-summary"><span>共 <strong id="summaryCount">1582</strong> 篇相关内容</span><span id="activeSummary" class="active-summary">YouTube</span></div>
-    </section>
+    <div class="filterbar" id="filterbar">
+      <div class="container filterbar__inner">
+        <div class="segmented" role="tablist" aria-label="内容范围" id="tabs">
+          <button type="button" role="tab" data-tab="hot">推荐</button>
+          <button type="button" role="tab" data-tab="latest">最新</button>
+          <button type="button" role="tab" data-tab="digest">精华</button>
+        </div>
+        <div class="filterbar__right">
+          <div class="view-toggle hide-mobile" role="group" aria-label="阅读模式">
+            <button type="button" data-mode="normal" aria-label="常规模式" data-icon="cards"></button>
+            <button type="button" data-mode="compact" aria-label="精简模式" data-icon="rows"></button>
+          </div>
+          <button class="btn btn--sm filter-toggle" type="button" id="openFilters" data-icon="sliders">筛选<span class="count" id="filterCount" hidden></span></button>
+        </div>
+      </div>
+    </div>
 
-    <section class="content-toolbar">
-      <div class="tabs" data-group="tab"><button class="tab selected" data-value="hot">热门 <span id="hotCount">1582</span></button><button class="tab" data-value="digest">精华 <span id="digestCount">210</span></button><button class="tab" data-value="all">全部 <span>—</span></button></div>
-      <div class="toolbar-right"><label class="select-wrap">日期<select id="dateSelect"><option value="all">不限</option><option value="yesterday">昨天</option><option value="3d">近3天</option><option value="7d">近7天</option><option value="month">近一月</option><option value="last-month">上月</option><option value="3month">近三月</option></select></label><label class="select-wrap">排序<select id="sortSelect"><option value="latest">最新发布</option><option value="oldest">最早发布</option><option value="favorites">最多收藏</option><option value="comments">最多评论</option><option value="likes">最多点赞</option><option value="anchors">最多锚点</option><option value="anchor-latest">最新投锚</option></select></label><label class="select-wrap">阅读<select id="modeSelect"><option value="normal">常规</option><option value="compact">简洁</option><option value="streamline">精简</option></select></label></div>
-    </section>
-
-    <div class="layout"><section id="cards" class="cards"></section><aside class="sidebar"><div class="side-card"><div class="side-head"><h2>我的常用 <span id="savedCount">0/7</span></h2><button id="clearSaved" class="link-btn">清空</button></div><div id="savedFilters" class="saved-list"><span class="empty">暂无常用筛选</span></div></div></aside></div>
-    <button id="loadMoreBtn" class="load-more" hidden>加载更多</button>
+    <div class="container">
+      <div class="active-filters" id="activeFilters" hidden></div>
+      <div class="discover-layout">
+        <section aria-label="内容列表">
+          <div class="feed" id="feed" aria-busy="true"></div>
+        </section>
+        <aside class="side-stack" aria-label="快捷入口">
+          <section class="sheet side-card">
+            <div class="panel-head" style="margin-bottom:0"><h3>我的常用筛选</h3><span class="hint num" id="savedCount"></span></div>
+            <div class="saved-list" id="savedFilters"><p class="hint">登录后可以保存最多 7 组筛选，下次一键打开。</p></div>
+          </section>
+          <section class="note promo-note">
+            <h3>会员内容每周更新</h3>
+            <p>用积分开通会员，解锁全部会员专享打法和资料包。</p>
+            <a class="btn btn--money btn--sm" href="membership.html">查看会员方案</a>
+          </section>
+          <section class="sheet write-card">
+            <h3>有一套跑通的打法？</h3>
+            <p>写下来分享给同行，审核通过后公开，还能收到积分打赏。</p>
+            <a class="btn btn--sm" href="publish.html" data-icon="edit">写一篇</a>
+          </section>
+        </aside>
+      </div>
+    </div>
   </main>
-  <div id="toast" class="toast" role="status"></div>
-  <script src="api-config.js?v=20261016api2"></script><script src="daily-quote.js"></script><script src="share.js?v=20261017platform"></script><script src="app.js?v=20261017youtube"></script>
-  <script src="nav.js"></script>
+
+  <footer class="site-footer"><div class="container"><span>© 月入万刀 · 实战内容与会员权益平台</span><span><a href="membership.html">会员中心</a>　<a href="publish.html">投稿</a></span></div></footer>
+
+  <nav class="tabbar" aria-label="快捷导航">
+    <a href="index.html" data-nav="discover" data-icon="discover"><span>发现</span></a>
+    <a href="membership.html" data-nav="membership" data-icon="member"><span>会员</span></a>
+    <a href="publish.html" class="tab-publish" aria-label="发布内容"><span class="plus" data-icon="plus"></span><small>发布</small></a>
+    <a href="profile.html#messages" data-nav="messages" data-icon="bell"><span>消息</span><span class="dot-badge" data-unread hidden></span></a>
+    <a href="profile.html" data-nav="profile" data-icon="user"><span>我的</span></a>
+  </nav>
+
+  <script src="api-config.js?v=20261017r1"></script>
+  <script src="core.js?v=20261017r1"></script>
+  <script src="daily-quote.js?v=20261017r1"></script>
+  <script src="assets/vendor/qrcode.js?v=20261017r1"></script>
+  <script src="share.js?v=20261017r1"></script>
+  <script src="app.js?v=20261017r1"></script>
 </body>
 </html>

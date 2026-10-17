@@ -175,4 +175,42 @@ assert(pointMembership.kind === 'membership' && pointMembership.amountPoints ===
 const cdkeyList = await fetch(`${base}/api/v1/admin/cdkeys`, { headers: adminHeaders }).then(response => response.json())
 assert(cdkeyList.items.some(item => item.id === cdkeyBatch.items[0].id && item.status === 'redeemed'), 'cdkey query failed')
 
+// Structured content: headings, lists, quotes and inline images render on the server.
+const userAuth = { authorization: `Bearer ${login.accessToken}`, 'content-type': 'application/json' }
+const structured = await fetch(`${base}/api/v1/admin/posts`, { method: 'POST', headers: adminHeaders, body: JSON.stringify({ title: `Structured ${Date.now()}`, platform: 'YouTube', project: '出海', skill: 'AI', content: `开头一段\n\n## 第一步\n- 要点 A\n- 要点 B\n\n1. 步骤一\n2. 步骤二\n\n> 引用 **加粗** https://example.com\n\n![示例图](${upload.items[0].url})\n\n<script>alert(1)</script>` }) }).then(response => response.json())
+const structuredDetail = await fetch(`${base}/api/v1/posts/${structured.id}`, { headers: userAuth }).then(response => response.json())
+assert(/<h2[^>]*>第一步<\/h2>/.test(structuredDetail.content) && structuredDetail.content.includes('<ul>') && structuredDetail.content.includes('<ol>') && structuredDetail.content.includes('<blockquote>') && structuredDetail.content.includes('<strong>加粗</strong>') && structuredDetail.content.includes('href="https://example.com"') && structuredDetail.content.includes('<figure') && !structuredDetail.content.includes('<script>'), 'structured content rendering failed')
+assert(structuredDetail.viewer && typeof structuredDetail.viewer.liked === 'boolean', 'post detail must describe the viewer state')
+assert(structuredDetail.excerpt && !structuredDetail.excerpt.includes('##'), 'auto excerpt must be plain text')
+
+// Threaded comments.
+const threadRoot = await fetch(`${base}/api/v1/posts/${structured.id}/comments`, { method: 'POST', headers: userAuth, body: JSON.stringify({ content: 'thread root' }) }).then(response => response.json())
+await fetch(`${base}/api/v1/comments/${threadRoot.id}/replies`, { method: 'POST', headers: userAuth, body: JSON.stringify({ content: 'thread reply' }) })
+const threaded = await fetch(`${base}/api/v1/posts/${structured.id}/comments?thread=1`).then(response => response.json())
+assert(threaded.items.length === 1 && threaded.items[0].replies?.length === 1 && threaded.items[0].replies[0].content === 'thread reply', 'threaded comments failed')
+
+// Interaction lists for the profile page.
+await fetch(`${base}/api/v1/posts/${structured.id}/favorite`, { method: 'POST', headers: userAuth })
+const favorites = await fetch(`${base}/api/v1/me/interactions?type=favorite`, { headers: userAuth }).then(response => response.json())
+assert(favorites.items.some(item => item.id === structured.id), 'favorite list failed')
+const likes = await fetch(`${base}/api/v1/me/interactions?type=like`, { headers: userAuth }).then(response => response.json())
+assert(likes.items.some(item => item.id === 'post_1'), 'like list failed')
+const meWithUnread = await fetch(`${base}/api/v1/me`, { headers: userAuth }).then(response => response.json())
+assert(typeof meWithUnread.unreadNotifications === 'number', 'me must report unread notifications')
+
+// Admin console endpoints.
+const adminPosts = await fetch(`${base}/api/v1/admin/posts?status=published&q=Structured`, { headers: adminHeaders }).then(response => response.json())
+assert(adminPosts.items.some(item => item.id === structured.id) && adminPosts.statusCounts && typeof adminPosts.statusCounts.published === 'number' && !Object.hasOwn(adminPosts.items[0], 'content'), 'admin post list failed')
+const adminPost = await fetch(`${base}/api/v1/admin/posts/${structured.id}`, { headers: adminHeaders }).then(response => response.json())
+assert(adminPost.id === structured.id && adminPost.contentHtml?.includes('<h2'), 'admin post detail failed')
+const renamedTag = await fetch(`${base}/api/v1/admin/tags/skill/${encodeURIComponent(tagName)}`, { method: 'PATCH', headers: adminHeaders, body: JSON.stringify({ name: `${tagName}X` }) }).then(response => response.json())
+assert(renamedTag.name === `${tagName}X`, 'admin tag rename failed')
+const deletedTag = await fetch(`${base}/api/v1/admin/tags/skill/${encodeURIComponent(`${tagName}X`)}`, { method: 'DELETE', headers: adminHeaders })
+assert(deletedTag.ok, 'admin tag delete failed')
+const extendedOverview = await fetch(`${base}/api/v1/admin/overview`, { headers: adminHeaders }).then(response => response.json())
+assert(typeof extendedOverview.users === 'number' && typeof extendedOverview.posts7d === 'number', 'admin overview extensions failed')
+// The dev-login user has no account record; status changes only apply to registered accounts.
+const missingAccount = await fetch(`${base}/api/v1/admin/users/demo`, { method: 'PATCH', headers: adminHeaders, body: JSON.stringify({ status: 'disabled' }) })
+assert(missingAccount.status === 404, 'admin user status must reject unknown accounts')
+
 console.log('API smoke checks passed')

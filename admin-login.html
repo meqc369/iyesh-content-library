@@ -2,29 +2,40 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#13213b">
   <title>后台登录 · 月入万刀</title>
   <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
-  <link rel="stylesheet" href="styles.css">
-  <style>
-    .admin-login-page{min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(145deg,#edf2ff 0%,#f7f8fb 55%,#fff2e4 100%);color:#182438}.admin-login-card{width:min(450px,100%);box-sizing:border-box;padding:42px;border:1px solid #e1e7f0;border-radius:22px;background:rgba(255,255,255,.97);box-shadow:0 24px 70px rgba(37,62,104,.14)}.admin-login-brand{display:flex;align-items:center;gap:10px;color:#253e68;font-weight:700;letter-spacing:.02em}.admin-login-logo{width:38px;height:38px;display:block;object-fit:contain;border-radius:12px;background:#fff}.admin-login-card h1{margin:32px 0 7px;color:#182438;font-size:29px;letter-spacing:-.04em}.admin-login-sub{margin:0 0 26px;color:#647187;font-size:13px;line-height:1.6}.admin-login-form{display:grid;gap:15px}.admin-login-field{display:grid;gap:7px;color:#53627b;font-size:13px}.admin-login-field input{box-sizing:border-box;width:100%;min-height:46px;padding:12px 13px;border:1px solid #dfe5ee;border-radius:10px;background:#fbfcfe;font:inherit;outline:none;transition:border-color .18s,box-shadow .18s,background .18s}.admin-login-field input:focus{border-color:#718cf4;background:#fff;box-shadow:0 0 0 4px rgba(86,116,237,.13)}.admin-login-options{display:flex;justify-content:space-between;align-items:center;gap:14px;color:#68768b;font-size:12px}.admin-login-options label{display:flex;align-items:center;gap:7px;white-space:nowrap}.admin-login-options input{accent-color:#5674ed}.admin-login-submit{min-height:46px;border:0;border-radius:10px;padding:0 13px;background:linear-gradient(135deg,#5674ed,#405dd6);color:#fff;font:inherit;font-weight:650;cursor:pointer;box-shadow:0 10px 18px rgba(67,91,213,.18);transition:transform .16s,box-shadow .16s,filter .16s}.admin-login-submit:hover{filter:brightness(1.04);transform:translateY(-1px);box-shadow:0 12px 22px rgba(67,91,213,.22)}.admin-login-submit:disabled{opacity:.6;cursor:wait;transform:none}.admin-login-message{min-height:20px;margin:0;color:#b65357;font-size:13px}.admin-login-message.success{color:#378b5b}.admin-login-foot{margin:24px 0 0;text-align:center;color:#687482;font-size:12px}.admin-login-foot a{color:#456999;text-decoration:none}.admin-login-foot a:hover{text-decoration:underline}
-    @media(max-width:520px){.admin-login-page{padding:16px}.admin-login-card{padding:30px 22px;border-radius:18px}.admin-login-card h1{margin-top:26px;font-size:26px}.admin-login-options{align-items:flex-start;flex-direction:column;gap:8px}}
-  </style>
+  <link rel="stylesheet" href="styles.css?v=20261017r1">
 </head>
-<body class="admin-login-page">
-  <main class="admin-login-card">
-    <div class="admin-login-brand"><img class="admin-login-logo" src="assets/iyesh-logo.webp" alt=""><span>月入万刀后台</span></div>
-    <h1>管理员登录</h1>
-    <p class="admin-login-sub">内容、会员、积分与系统日志</p>
-    <form id="adminLoginForm" class="admin-login-form">
-      <label class="admin-login-field">管理员账号<input name="username" autocomplete="username" required placeholder="输入管理员用户名"></label>
-      <label class="admin-login-field">管理员密码<input name="password" type="password" autocomplete="current-password" required placeholder="输入管理员密码"></label>
-      <div class="admin-login-options"><label><input name="remember" type="checkbox" checked> 30 天内免重复登录</label><span>角色权限受后台配置控制</span></div>
-      <button class="admin-login-submit" type="submit">进入后台</button>
-      <p id="adminLoginMessage" class="admin-login-message" role="status"></p>
-    </form>
-    <p class="admin-login-foot"><a href="index.html">返回月入万刀首页</a></p>
-  </main>
-  <script src="api-config.js?v=20261016api2"></script><script src="admin-login.js"></script>
+<body data-page="admin-login" data-skip-me>
+  <div class="auth-page">
+    <section class="band auth-brand">
+      <a class="brand" href="index.html" aria-label="返回月入万刀首页"><img src="assets/iyesh-logo.webp" alt="" width="32" height="32"><span>月入万刀</span></a>
+      <div><h1>运营后台</h1><p class="motto" style="margin-top:14px">审核内容、管理会员与积分、处理提现。</p></div>
+      <ul>
+        <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>按角色显示可用功能，所有操作写入审计日志</span></li>
+        <li><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><span>连续输错密码会被临时锁定</span></li>
+      </ul>
+    </section>
+    <main class="auth-main">
+      <div class="auth-card">
+        <h2>管理员登录</h2>
+        <p>请使用后台分配的管理员账号</p>
+        <form class="auth-form" id="adminLoginForm" novalidate style="margin-top:24px">
+          <div class="field"><label class="label" for="adminUsername">管理员账号</label><input class="input" id="adminUsername" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required placeholder="输入用户名"></div>
+          <div class="field"><label class="label" for="adminPassword">密码</label><div class="password-wrap"><input class="input" id="adminPassword" name="password" type="password" autocomplete="current-password" required placeholder="输入密码"><button type="button" data-toggle-password aria-label="显示密码" data-icon="eye"></button></div></div>
+          <label class="check"><input name="remember" type="checkbox" checked> 30 天内保持登录</label>
+          <button class="btn btn--primary btn--lg btn--block" type="submit">进入后台</button>
+        </form>
+        <p class="auth-message" id="adminLoginMessage" role="status" aria-live="polite"></p>
+        <p class="auth-foot"><a href="index.html">返回网站首页</a></p>
+      </div>
+    </main>
+  </div>
+  <script src="api-config.js?v=20261017r1"></script>
+  <script src="core.js?v=20261017r1"></script>
+  <script src="admin-login.js?v=20261017r1"></script>
 </body>
 </html>

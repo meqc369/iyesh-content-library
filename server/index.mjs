@@ -11,6 +11,8 @@ const DATA_FILE = join(dirname(fileURLToPath(import.meta.url)), 'data', 'store.j
 const UPLOADS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'uploads')
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 const MAX_UPLOAD_COUNT = 9
+// A post may reference more images than a single upload request carries.
+const MAX_POST_IMAGES = 20
 const MAX_UPLOAD_TOTAL_BYTES = 25 * 1024 * 1024
 const MAX_STORED_IMAGE_BYTES = 2 * 1024 * 1024
 const MAX_IMAGE_DIMENSION = Math.max(640, Math.min(6000, Number(process.env.MAX_IMAGE_DIMENSION || 2400) || 2400))
@@ -246,15 +248,75 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
 }
 
+// Post bodies are stored as lightweight text: blank-line separated blocks,
+// with optional "## " headings, "- " / "1. " lists, "> " quotes, **bold**
+// and inline images written as ![说明](/uploads/name.ext). Everything is
+// escaped first, so the renderer can never emit author-supplied markup.
+const INLINE_IMAGE_PATTERN = /^!\[([^\]\n]{0,120})\]\((\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*)\)$/
+function formatInlineText(value) {
+  return escapeHtml(value).replace(/\*\*([^*\n]{1,200})\*\*/g, '<strong>$1</strong>')
+}
+function renderInlineText(value) {
+  const text = String(value ?? '')
+  let html = ''
+  let last = 0
+  for (const match of text.matchAll(/https?:\/\/[^\s<>"'，。！？、；：）)\]】]+/g)) {
+    const url = match[0].replace(/[.,;:!?]+$/, '')
+    html += formatInlineText(text.slice(last, match.index))
+    html += `<a href="${escapeHtml(url)}" target="_blank" rel="nofollow noopener noreferrer">${escapeHtml(url)}</a>${escapeHtml(match[0].slice(url.length))}`
+    last = match.index + match[0].length
+  }
+  return html + formatInlineText(text.slice(last))
+}
+function inlineImageUrls(content) {
+  return String(content || '').replace(/\r\n?/g, '\n').split('\n').map(line => line.trim().match(INLINE_IMAGE_PATTERN)?.[2]).filter(Boolean)
+}
 function contentHtml(post) {
-  const text = String(post.content || post.excerpt || '')
-  const paragraphs = text.split(/\n{2,}/).filter(Boolean).map(paragraph => `<p>${paragraph.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])).replace(/\n/g, '<br>')}</p>`).join('')
   // Keep uploads same-origin by default. The API is often bound to 127.0.0.1
   // behind the H5 reverse proxy, so returning that internal address would make
   // otherwise valid images impossible for a browser to load in production.
   const imageBase = UPLOAD_PUBLIC_BASE_URL || ''
-  const images = normalizeUploadedImages(post.images).map((url, index) => `<figure class="post-image"><img src="${`${imageBase}${url}`.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" alt="正文配图 ${index + 1}" loading="lazy"></figure>`).join('')
-  return `${paragraphs}${images}`
+  const used = new Set()
+  let imageIndex = 0
+  const figure = (url, caption) => { imageIndex += 1; return `<figure class="post-image"><img src="${escapeHtml(`${imageBase}${url}`)}" alt="${escapeHtml(caption || `正文配图 ${imageIndex}`)}" loading="lazy">${caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ''}</figure>` }
+  const html = []
+  for (const block of String(post.content || post.excerpt || '').replace(/\r\n?/g, '\n').split(/\n{2,}/)) {
+    const lines = block.split('\n').map(line => line.replace(/\s+$/, '')).filter(line => line.trim())
+    let index = 0
+    while (index < lines.length) {
+      const line = lines[index]
+      const image = line.trim().match(INLINE_IMAGE_PATTERN)
+      if (image) { used.add(image[2]); html.push(figure(image[2], image[1].trim())); index += 1; continue }
+      const heading = line.match(/^\s*(#{2,3})\s+(.+)$/)
+      if (heading) { html.push(`<h${heading[1].length}>${renderInlineText(heading[2])}</h${heading[1].length}>`); index += 1; continue }
+      const groups = [
+        [/^\s*[-•*]\s+/, items => `<ul>${items.map(item => `<li>${renderInlineText(item)}</li>`).join('')}</ul>`],
+        [/^\s*\d{1,3}[.、)]\s*/, items => `<ol>${items.map(item => `<li>${renderInlineText(item)}</li>`).join('')}</ol>`],
+        [/^\s*>\s?/, items => `<blockquote>${items.map(renderInlineText).join('<br>')}</blockquote>`]
+      ]
+      const group = groups.find(([pattern]) => pattern.test(line))
+      if (group) {
+        const items = []
+        while (index < lines.length && group[0].test(lines[index]) && !INLINE_IMAGE_PATTERN.test(lines[index].trim())) { items.push(lines[index].replace(group[0], '')); index += 1 }
+        html.push(group[1](items)); continue
+      }
+      const paragraph = []
+      while (index < lines.length && !INLINE_IMAGE_PATTERN.test(lines[index].trim()) && !/^\s*#{2,3}\s+/.test(lines[index]) && !groups.some(([pattern]) => pattern.test(lines[index]))) { paragraph.push(lines[index]); index += 1 }
+      html.push(`<p>${paragraph.map(renderInlineText).join('<br>')}</p>`)
+    }
+  }
+  const extra = normalizeUploadedImages(post.images).filter(url => !used.has(url)).map(url => figure(url, '')).join('')
+  return `${html.join('')}${extra}`
+}
+function plainTextFromContent(content) {
+  return String(content || '').replace(/\r\n?/g, '\n').split('\n')
+    .filter(line => !INLINE_IMAGE_PATTERN.test(line.trim()))
+    .map(line => line.replace(/^\s*#{2,3}\s+/, '').replace(/^\s*(?:[-•*]|\d{1,3}[.、)]|>)\s*/, '').replace(/\*\*/g, ''))
+    .join(' ').replace(/\s+/g, ' ').trim()
+}
+function autoExcerpt(content, limit = 120) {
+  const text = plainTextFromContent(content)
+  return text.length > limit ? `${text.slice(0, limit)}…` : text
 }
 
 function publicAssetUrl(value) {
@@ -306,12 +368,13 @@ function sharePageHtml(post) {
   const title = metadata.title
   const description = metadata.description
   const image = metadata.imageUrl
+  const metaImage = image || `${PUBLIC_WEB_BASE_URL}/assets/iyesh-logo.webp`
   const shareUrl = metadata.shareUrl
   const canonicalUrl = metadata.canonicalUrl
   const accessLabel = metadata.accessLabel
   const byline = [metadata.platform, metadata.author?.name, accessLabel].filter(Boolean).join(' · ')
   const redirectScript = `<script>window.setTimeout(function(){window.location.replace(${JSON.stringify(canonicalUrl)})},220)</script>`
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · 月入万刀</title><meta name="description" content="${escapeHtml(description)}"><meta property="og:type" content="article"><meta property="og:site_name" content="月入万刀"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(description)}"><meta property="og:url" content="${escapeHtml(shareUrl)}"><meta property="og:image" content="${escapeHtml(image)}"><meta property="og:image:alt" content="${escapeHtml(title)}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escapeHtml(title)}"><meta name="twitter:description" content="${escapeHtml(description)}"><meta name="twitter:image" content="${escapeHtml(image)}"><link rel="canonical" href="${escapeHtml(canonicalUrl)}"><link rel="icon" type="image/png" href="${escapeHtml(`${PUBLIC_WEB_BASE_URL}/assets/iyesh-favicon.png`)}"><style> :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f5f7fb;color:#17233b;font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft Yahei",sans-serif}.page{max-width:640px;margin:0 auto;padding:48px 20px}.brand{display:flex;align-items:center;gap:10px;margin-bottom:24px;color:#5278e8;font-size:14px;font-weight:700;letter-spacing:.08em}.brand img{width:28px;height:28px;object-fit:contain;border-radius:8px}.card{overflow:hidden;border:1px solid #e0e7f2;border-radius:22px;background:#fff;box-shadow:0 18px 50px rgba(26,48,90,.12)}.visual{height:220px;background:linear-gradient(135deg,#315ee4,#91b3ff) center/cover;display:grid;place-items:center;color:#fff;font-size:54px;font-weight:800}.content{padding:24px}.eyebrow{margin:0 0 8px;color:#5278e8;font-size:12px;font-weight:700}.title{margin:0;font-size:25px;line-height:1.3}.description{margin:14px 0 0;color:#66748a}.byline{margin:18px 0 0;color:#8995a8;font-size:13px}.open{display:inline-flex;margin-top:22px;padding:11px 18px;border-radius:999px;background:#315ee4;color:#fff;text-decoration:none;font-weight:700}.hint{margin:18px 0 0;color:#8a95a6;font-size:12px;text-align:center}@media(max-width:480px){.page{padding:28px 14px}.visual{height:160px}.content{padding:19px}.title{font-size:21px}}</style></head><body><main class="page"><div class="brand"><img src="${escapeHtml(`${PUBLIC_WEB_BASE_URL}/assets/iyesh-logo.webp`)}" alt="">月入万刀</div><article class="card"><div class="visual" style="${image ? `background-image:linear-gradient(180deg,rgba(20,42,85,.02),rgba(20,42,85,.42)),url('${escapeHtml(image)}')` : ''}"><span>${image ? '' : escapeHtml((metadata.platform || title || '月').slice(0, 1))}</span></div><div class="content"><p class="eyebrow">${escapeHtml(metadata.platform || '实战内容')}</p><h1 class="title">${escapeHtml(title)}</h1><p class="description">${escapeHtml(description)}</p><p class="byline">${escapeHtml(byline)}</p><a class="open" href="${escapeHtml(canonicalUrl)}">打开内容详情</a></div></article><p class="hint">点击查看完整内容 · 月入万刀</p></main>${redirectScript}</body></html>`
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · 月入万刀</title><meta name="description" content="${escapeHtml(description)}"><meta property="og:type" content="article"><meta property="og:site_name" content="月入万刀"><meta property="og:title" content="${escapeHtml(title)}"><meta property="og:description" content="${escapeHtml(description)}"><meta property="og:url" content="${escapeHtml(shareUrl)}"><meta property="og:image" content="${escapeHtml(metaImage)}"><meta property="og:image:alt" content="${escapeHtml(title)}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${escapeHtml(title)}"><meta name="twitter:description" content="${escapeHtml(description)}"><meta name="twitter:image" content="${escapeHtml(metaImage)}"><link rel="canonical" href="${escapeHtml(canonicalUrl)}"><link rel="icon" type="image/png" href="${escapeHtml(`${PUBLIC_WEB_BASE_URL}/assets/iyesh-favicon.png`)}"><style> :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#f4f5f1;color:#142033;font:16px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft Yahei",sans-serif}.top{height:180px;background:#13213b}.page{max-width:560px;margin:-132px auto 0;padding:0 16px 48px}.brand{display:flex;align-items:center;gap:10px;margin-bottom:20px;color:#fff;font-size:16px;font-weight:700}.brand img{width:30px;height:30px;object-fit:contain;border-radius:8px;background:#fff;padding:3px}.card{overflow:hidden;border:1px solid #e3e6df;border-radius:20px;background:#fff;box-shadow:0 24px 48px -28px rgba(19,33,59,.45)}.visual{aspect-ratio:16/9;background:#e9ecf3 center/cover}.content{padding:24px}.eyebrow{margin:0 0 8px;color:#2c62db;font-size:13px;font-weight:700}.title{margin:0;font-size:24px;line-height:1.35}.description{margin:12px 0 0;color:#5b6577}.byline{margin:16px 0 0;color:#8a92a0;font-size:13px}.open{display:flex;justify-content:center;margin-top:22px;padding:13px 18px;border-radius:12px;background:#2c62db;color:#fff;text-decoration:none;font-weight:700}.hint{margin:18px 0 0;color:#8a92a0;font-size:12px;text-align:center}@media(max-width:480px){.content{padding:20px}.title{font-size:21px}}</style></head><body><div class="top"></div><main class="page"><div class="brand"><img src="${escapeHtml(`${PUBLIC_WEB_BASE_URL}/assets/iyesh-logo.webp`)}" alt="">月入万刀</div><article class="card">${image ? `<div class="visual" style="background-image:url('${escapeHtml(image)}')"></div>` : ''}<div class="content"><p class="eyebrow">${escapeHtml(metadata.platform || '实战内容')}</p><h1 class="title">${escapeHtml(title)}</h1><p class="description">${escapeHtml(description)}</p><p class="byline">${escapeHtml(byline)}</p><a class="open" href="${escapeHtml(canonicalUrl)}">打开内容详情</a></div></article><p class="hint">正在打开内容详情…</p></main>${redirectScript}</body></html>`
 }
 
 async function readBody(req) {
@@ -472,7 +535,7 @@ function normalizeUploadedUrl(value) {
 
 function normalizeUploadedImages(value) {
   const list = Array.isArray(value) ? value : []
-  return list.map(normalizeUploadedUrl).filter(Boolean).slice(0, 9)
+  return [...new Set(list.map(normalizeUploadedUrl).filter(Boolean))].slice(0, MAX_POST_IMAGES)
 }
 
 function normalizePoints(value) {
@@ -1067,11 +1130,29 @@ function accessFor(post, userId) {
   const memberPlanIds = Array.isArray(post.memberPlanIds) ? post.memberPlanIds : []
   const permissions = membershipPermissions(userId)
   const canReadMemberContent = permissions.includes('content.member.read') || permissions.includes('content.read')
-  const entitled = accessType === 'free' || (accessType === 'member' && hasMembership(userId, memberPlanIds) && canReadMemberContent) || (accessType === 'paid' && hasContentEntitlement(userId, post.id))
+  const isAuthor = Boolean(userId) && post.author?.id === userId
+  const entitled = accessType === 'free' || isAuthor || (accessType === 'member' && hasMembership(userId, memberPlanIds) && canReadMemberContent) || (accessType === 'paid' && hasContentEntitlement(userId, post.id))
   const requiredPlanName = memberPlanIds.length ? memberPlanIds.map(planId => plans.find(plan => plan.id === planId)?.name).filter(Boolean).join(' / ') : (accessType === 'member' ? '会员' : '')
   return { accessType, pricePoints: normalizePoints(post.pricePoints ?? post.priceCents), priceUnitName: pointsUnitName(), priceCents: 0, memberPlanIds, requiredPlanName, locked: !entitled, canRead: entitled, lockReason: accessType === 'member' ? '需要会员资格' : accessType === 'paid' ? '需要积分购买后查看' : null }
 }
-function summaryPost(post, userId) { return { ...post, ...accessFor(post, userId), content: undefined } }
+// List and detail payloads never expose body images of a locked post. An
+// explicit cover is the author's chosen public visual; free posts fall back to
+// their first body image so the feed can show a thumbnail.
+function postThumbnail(post, access) {
+  if (post.coverImage) return post.coverImage
+  const images = normalizeUploadedImages(post.images)
+  const first = inlineImageUrls(post.content)[0] || images[0] || null
+  return access.canRead && access.accessType === 'free' ? first : null
+}
+function publicExcerpt(post, access) {
+  const excerpt = String(post.excerpt || '').trim()
+  if (excerpt) return excerpt
+  return access.accessType === 'free' ? autoExcerpt(post.content) : ''
+}
+function summaryPost(post, userId) {
+  const access = accessFor(post, userId)
+  return { ...post, ...access, excerpt: publicExcerpt(post, access), thumbnail: postThumbnail(post, access), images: access.canRead ? normalizeUploadedImages(post.images) : [], imageCount: new Set([...normalizeUploadedImages(post.images), ...inlineImageUrls(post.content)]).size, content: undefined }
+}
 function appendAudit(req, action, targetType, targetId, detail = {}) {
   const admin = currentAdmin(req)
   auditLogs.unshift({ id: id('audit'), requestId: String(req.headers['x-request-id'] || id('request')), actorId: admin?.id || currentUser(req)?.id || 'system', action, targetType, targetId: targetId || null, detail, ipAddress: String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim() || null, userAgent: String(req.headers['user-agent'] || '').slice(0, 300) || null, createdAt: nowIso() })
@@ -1376,11 +1457,21 @@ function search(input, userId = null) {
   if (dateEnd) result = result.filter(post => new Date(post.publishedAt) <= new Date(dateEnd))
   const scoped = [...result]
   if (input.tab === 'digest' || input.isDigested) result = result.filter(post => post.digest)
-  const sort = input.sort || input.orderBy || 'latest'
+  // An explicit sort always wins. Without one, the "hot" tab ranks by
+  // engagement and every other tab by publish time.
+  const sort = String(input.sort || input.orderBy || (input.tab === 'hot' ? 'hot' : 'latest'))
   const field = { likes: 'likes', comments: 'comments', favorites: 'favorites', anchors: 'anchors', 'anchor-latest': 'anchors' }[sort]
-  if (sort === 'oldest') result.reverse()
-  else if (field) result.sort((a, b) => b.counts[field] - a.counts[field])
-  else if (sort === 'hot' || input.tab === 'hot') result.sort((a, b) => (b.counts.likes + b.counts.comments * 2 + b.counts.favorites * 3) - (a.counts.likes + a.counts.comments * 2 + a.counts.favorites * 3))
+  const publishedTime = post => new Date(post.publishedAt || post.submittedAt || 0).getTime() || 0
+  const hotScore = post => {
+    const counts = post.counts || {}
+    const engagement = Number(counts.likes || 0) + Number(counts.comments || 0) * 2 + Number(counts.favorites || 0) * 3 + Number(counts.anchors || 0) * 2 + Number(counts.tips || 0) * 4 + (post.digest ? 20 : 0)
+    const ageHours = Math.max(0, (Date.now() - publishedTime(post)) / 3600000)
+    return (engagement + 1) / Math.pow(ageHours + 2, 0.8)
+  }
+  if (sort === 'oldest') result.sort((a, b) => publishedTime(a) - publishedTime(b))
+  else if (field) result.sort((a, b) => Number(b.counts?.[field] || 0) - Number(a.counts?.[field] || 0) || publishedTime(b) - publishedTime(a))
+  else if (sort === 'hot') result.sort((a, b) => hotScore(b) - hotScore(a) || publishedTime(b) - publishedTime(a))
+  else result.sort((a, b) => publishedTime(b) - publishedTime(a))
   const pageSize = Math.min(Math.max(Number(input.pageSize) || 20, 1), 100)
   const cursor = Number(input.cursor)
   const start = Number.isFinite(cursor) && cursor >= 0 ? cursor : (Math.max(Number(input.page) || 1, 1) - 1) * pageSize
@@ -1399,6 +1490,29 @@ function paginate(items, input = {}) {
 function visibleComments(postId, input = {}) {
   const source = (comments.get(postId) || []).filter(item => item.status !== 'deleted')
   const sort = String(input.sort || input.orderBy || 'latest')
+  // thread=1 pages through top-level comments and nests every reply (at any
+  // depth) under its root, so a thread never splits across pages.
+  if (String(input.thread || '') === '1' || input.thread === true) {
+    const byId = new Map(source.map(item => [item.id, item]))
+    const rootOf = item => { let current = item; const seen = new Set(); while (current?.parentId && byId.has(current.parentId) && !seen.has(current.id)) { seen.add(current.id); current = byId.get(current.parentId) } return current }
+    const replies = new Map()
+    for (const item of source) {
+      if (!item.parentId) continue
+      const root = rootOf(item)
+      if (!root || root.id === item.id) continue
+      const parent = byId.get(item.parentId)
+      const list = replies.get(root.id) || []
+      list.push({ ...item, replyTo: parent && parent.id !== root.id ? { id: parent.id, name: parent.user?.name || '用户' } : null })
+      replies.set(root.id, list)
+    }
+    const roots = source.filter(item => !item.parentId || !byId.has(item.parentId))
+    const replyCount = item => (replies.get(item.id) || []).length
+    if (sort === 'oldest') roots.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    else if (sort === 'hot') roots.sort((a, b) => replyCount(b) - replyCount(a) || new Date(b.createdAt) - new Date(a.createdAt))
+    else roots.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    const page = paginate(roots, input)
+    return { ...page, total: source.length, rootTotal: roots.length, items: page.items.map(item => ({ ...item, replies: (replies.get(item.id) || []).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)) })) }
+  }
   const items = [...source]
   if (sort === 'oldest') items.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
   else if (sort === 'hot') items.sort((a, b) => Number(b.likes || 0) - Number(a.likes || 0) || new Date(b.createdAt) - new Date(a.createdAt))
@@ -1408,7 +1522,7 @@ function visibleComments(postId, input = {}) {
 
 function postForUser(post, userId) {
   if (!post || post.author?.id !== userId) return null
-  return { ...summaryPost(post, userId), content: post.content || '', status: post.status || 'published', submittedAt: post.submittedAt || null, publishedAt: post.publishedAt || null, rejectedAt: post.rejectedAt || null, rejectionReason: post.rejectionReason || null }
+  return { ...summaryPost(post, userId), excerpt: post.excerpt || '', images: normalizeUploadedImages(post.images), coverImage: post.coverImage || null, content: post.content || '', status: post.status || 'published', submittedAt: post.submittedAt || null, publishedAt: post.publishedAt || null, rejectedAt: post.rejectedAt || null, rejectionReason: post.rejectionReason || null }
 }
 
 function findComment(commentId) {
@@ -1449,7 +1563,8 @@ const server = http.createServer(async (req, res) => {
       try {
         const filename = uploadAssetMatch[1]
         const content = await readFile(join(UPLOADS_DIR, filename))
-        res.writeHead(200, { 'content-type': uploadContentType(filename), 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' })
+        // CORS lets the share-poster canvas draw covers when the API runs on another origin.
+        res.writeHead(200, { 'content-type': uploadContentType(filename), 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff', ...(CORS_ORIGIN ? { 'access-control-allow-origin': CORS_ORIGIN } : {}) })
         return res.end(content)
       } catch {
         return json(res, 404, { message: '资源不存在' })
@@ -1471,7 +1586,8 @@ const server = http.createServer(async (req, res) => {
     const uploadCreate = url.pathname === '/api/v1/uploads' && req.method === 'POST'
     const userPostWrite = postMatch && ['PATCH', 'DELETE'].includes(req.method)
     const writesUserData = uploadCreate || postCreate || userPostWrite || (postReportMatch && req.method === 'POST') || (commentReportMatch && req.method === 'POST') || (commentDeleteMatch && req.method === 'DELETE') || (replyMatch && req.method === 'POST') || (commentMatch && req.method === 'POST') || (interactionMatch && (req.method === 'POST' || req.method === 'DELETE')) || (pointPurchaseMatch && req.method === 'POST') || (url.pathname.startsWith('/api/v1/saved-filters') && ['POST', 'PATCH', 'DELETE'].includes(req.method)) || (orderPath && req.method === 'POST') || (url.pathname === '/api/v1/member/me' && req.method !== 'GET') || (url.pathname === '/api/v1/me/profile' && ['PATCH', 'POST'].includes(req.method)) || (/^\/api\/v1\/me\/notifications\/[^/]+\/read$/.test(url.pathname) && req.method === 'PATCH') || (url.pathname === '/api/v1/me/notifications/read-all' && req.method === 'POST') || ((url.pathname === '/api/v1/me/withdrawals' || url.pathname === '/api/v1/withdrawals') && req.method === 'POST') || ((url.pathname === '/api/v1/me/checkin' || url.pathname === '/api/v1/checkin' || url.pathname === '/api/v1/checkins/sign') && req.method === 'POST')
-    if (writesUserData && !user) return json(res, 401, { message: '需要登录' })
+    // Administrators upload images for posts and the purchase QR code from the console.
+    if (writesUserData && !user && !(uploadCreate && currentAdmin(req))) return json(res, 401, { message: '需要登录' })
     if (req.method === 'POST' && url.pathname === '/api/v1/auth/register/request-code') {
       try {
         const input = await readBody(req); const email = normalizeEmail(input.email)
@@ -1567,7 +1683,7 @@ const server = http.createServer(async (req, res) => {
       if (!user) return json(res, 401, { message: '需要登录' })
       const membership = activeMembershipsFor(user.id)[0] || null
       const group = membershipGroup(membership)
-      return json(res, 200, { user: profileFor(user), membership: membership ? { ...membership, planName: plans.find(plan => plan.id === membership.planId)?.name || '会员', groupName: group?.name || '会员', permissions: membershipPermissions(user.id) } : null, points: { balance: pointsBalance(user.id), unitName: pointsUnitName(), unit: pointsUnitName() }, permissions: membershipPermissions(user.id) })
+      return json(res, 200, { user: profileFor(user), membership: membership ? { ...membership, planName: plans.find(plan => plan.id === membership.planId)?.name || '会员', groupName: group?.name || '会员', permissions: membershipPermissions(user.id) } : null, points: { balance: pointsBalance(user.id), unitName: pointsUnitName(), unit: pointsUnitName() }, permissions: membershipPermissions(user.id), unreadNotifications: (notifications.get(user.id) || []).filter(item => !item.readAt).length })
     }
     if (req.method === 'GET' && url.pathname === '/api/v1/me/referral') {
       if (!user) return json(res, 401, { message: '需要登录' })
@@ -1631,6 +1747,20 @@ const server = http.createServer(async (req, res) => {
       else if (sort === 'status') items.sort((a, b) => String(a.status).localeCompare(String(b.status)) || new Date(b.submittedAt || b.publishedAt || 0) - new Date(a.submittedAt || a.publishedAt || 0))
       else items.sort((a, b) => new Date(b.submittedAt || b.publishedAt || 0) - new Date(a.submittedAt || a.publishedAt || 0))
       return json(res, 200, paginate(items.map(post => postForUser(post, user.id)), Object.fromEntries(url.searchParams)))
+    }
+    if (req.method === 'GET' && url.pathname === '/api/v1/me/interactions') {
+      if (!user) return json(res, 401, { message: '需要登录' })
+      const type = ['like', 'favorite', 'anchor'].includes(url.searchParams.get('type')) ? url.searchParams.get('type') : 'favorite'
+      const suffix = `:${user.id}:${type}`
+      const marked = []
+      for (const [key, value] of interactions.entries()) {
+        if (!value || !key.endsWith(suffix)) continue
+        const post = posts.find(item => item.id === key.slice(0, -suffix.length) && item.status === 'published')
+        if (post) marked.push({ post, at: typeof value === 'string' ? value : null })
+      }
+      marked.sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+      const page = paginate(marked, Object.fromEntries(url.searchParams))
+      return json(res, 200, { ...page, type, items: page.items.map(item => ({ ...summaryPost(item.post, user.id), interactedAt: item.at })) })
     }
     if (myPostMatch && req.method === 'GET') {
       if (!user) return json(res, 401, { message: '需要登录' })
@@ -2064,6 +2194,23 @@ const server = http.createServer(async (req, res) => {
         const items = source.filter(item => (!status || item.status === status) && (!query || [item.id, item.username, item.email, item.name].some(value => String(value || '').toLowerCase().includes(query))))
         return json(res, 200, paginate(items, Object.fromEntries(url.searchParams)))
       }
+      const adminUserPatchMatch = url.pathname.match(/^\/api\/v1\/admin\/users\/([^/]+)$/)
+      if (adminUserPatchMatch && req.method === 'PATCH') {
+        const account = accounts.get(decodeURIComponent(adminUserPatchMatch[1]))
+        if (!account) return json(res, 404, { message: '用户不存在' })
+        const input = await readBody(req)
+        const status = String(input.status || '').trim()
+        if (!['active', 'disabled'].includes(status)) return json(res, 422, { message: '用户状态只能是 active 或 disabled' })
+        const previous = account.status || 'active'
+        account.status = status
+        // Disabling must end every existing session immediately.
+        if (status === 'disabled' && previous !== 'disabled') account.authVersion = randomBytes(16).toString('hex')
+        account.statusNote = String(input.note || input.reason || '').trim().slice(0, 300) || null
+        account.statusUpdatedAt = nowIso()
+        appendAudit(req, status === 'disabled' ? 'disable' : 'enable', 'account', account.id, { previous, note: account.statusNote })
+        await persistStore()
+        return json(res, 200, { user: { ...accountUser(account), status: account.status, statusNote: account.statusNote } })
+      }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/notifications') {
         const userId = String(url.searchParams.get('userId') || '').trim()
         const batchId = String(url.searchParams.get('batchId') || '').trim()
@@ -2192,7 +2339,7 @@ const server = http.createServer(async (req, res) => {
         const activePostCount = posts.filter(item => item.status !== 'archived').length
         const paidOrderCount = orders.filter(item => item.status === 'paid').length
         const pointsInCirculation = [...pointsAccounts.values()].reduce((total, value) => total + Number(value || 0), 0)
-        return json(res, 200, { posts: activePostCount, publishedPosts: posts.filter(item => item.status === 'published').length, pendingPosts: posts.filter(item => item.status === 'pending').length, tags: Object.values(tags).reduce((total, values) => total + values.length, 0), comments: [...comments.values()].reduce((total, values) => total + values.length, 0), reports: reports.filter(report => report.status === 'pending').length + commentReports.filter(report => report.status === 'pending').length, plans: activePlans().length, memberGroups: memberGroups.filter(group => group.status === 'active').length, memberships: [...memberships.values()].reduce((total, values) => total + values.filter(item => item.status === 'active').length, 0), orders: orders.length, paidOrders: paidOrderCount, revenueCents: orders.filter(item => item.status === 'paid').reduce((total, item) => total + Number(item.amountCents || 0), 0), tipsCents: tips.filter(item => item.status === 'paid').reduce((total, item) => total + Number(item.amountCents || 0), 0), tipsPoints: tips.filter(item => item.status === 'paid').reduce((total, item) => total + Number(item.points || 0), 0), points: pointsInCirculation, pointsAccounts: pointsAccounts.size, pointsInCirculation, pointsTransactions: pointsLedger.length, recharges: pointsLedger.filter(item => item.type === 'admin_recharge').length, withdrawals: withdrawals.length, pendingWithdrawals: withdrawals.filter(item => item.status === 'pending').length, auditLogs: auditLogs.length })
+        return json(res, 200, { posts: activePostCount, publishedPosts: posts.filter(item => item.status === 'published').length, pendingPosts: posts.filter(item => item.status === 'pending').length, tags: Object.values(tags).reduce((total, values) => total + values.length, 0), comments: [...comments.values()].reduce((total, values) => total + values.length, 0), reports: reports.filter(report => report.status === 'pending').length + commentReports.filter(report => report.status === 'pending').length, plans: activePlans().length, memberGroups: memberGroups.filter(group => group.status === 'active').length, memberships: [...memberships.values()].reduce((total, values) => total + values.filter(item => item.status === 'active').length, 0), orders: orders.length, paidOrders: paidOrderCount, revenueCents: orders.filter(item => item.status === 'paid').reduce((total, item) => total + Number(item.amountCents || 0), 0), tipsCents: tips.filter(item => item.status === 'paid').reduce((total, item) => total + Number(item.amountCents || 0), 0), tipsPoints: tips.filter(item => item.status === 'paid').reduce((total, item) => total + Number(item.points || 0), 0), points: pointsInCirculation, pointsAccounts: pointsAccounts.size, pointsInCirculation, pointsTransactions: pointsLedger.length, recharges: pointsLedger.filter(item => item.type === 'admin_recharge').length, withdrawals: withdrawals.length, pendingWithdrawals: withdrawals.filter(item => item.status === 'pending').length, auditLogs: auditLogs.length, users: accounts.size, newUsers7d: [...accounts.values()].filter(item => item.createdAt && Date.now() - new Date(item.createdAt).getTime() < 7 * 86400000).length, posts7d: posts.filter(item => item.status === 'published' && item.publishedAt && Date.now() - new Date(item.publishedAt).getTime() < 7 * 86400000).length, checkinsToday: [...checkins.values()].flat().filter(record => record.checkinDate === checkinDateKey()).length })
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/reports') {
         const status = url.searchParams.get('status'); const postId = url.searchParams.get('postId')
@@ -2441,7 +2588,7 @@ const server = http.createServer(async (req, res) => {
         const userId = url.searchParams.get('userId')
         const items = pointsLedger.filter(item => item.type === 'admin_recharge' && (!userId || item.userId === userId))
         const paging = Object.fromEntries(url.searchParams); if (!paging.pageSize) paging.pageSize = paging.limit || 100
-        const page = paginate(items, paging); return json(res, 200, page)
+        const page = paginate(items, paging); return json(res, 200, { ...page, items: page.items.map(item => ({ ...item, user: referralUserPublic(item.userId) })) })
       }
       if (req.method === 'DELETE' && (url.pathname === '/api/v1/admin/point-recharges' || url.pathname === '/api/v1/admin/points/ledger' || url.pathname === '/api/v1/admin/audit-logs')) return json(res, 405, { message: '积分流水和系统日志只允许追加与查询，不允许删除' })
       const adminPointsRechargeMatch = url.pathname.match(/^\/api\/v1\/admin\/(?:points\/recharge|users\/([^/]+)\/points)$/)
@@ -2463,7 +2610,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/memberships') {
         const userId = url.searchParams.get('userId'); const status = url.searchParams.get('status')
-        const items = [...memberships.entries()].flatMap(([candidateUserId, values]) => values.filter(item => (!userId || candidateUserId === userId) && (!status || item.status === status)).map(item => ({ ...item, userId: candidateUserId, groupName: membershipGroup(item)?.name || '会员', planName: plans.find(plan => plan.id === item.planId)?.name || null })))
+        const items = [...memberships.entries()].flatMap(([candidateUserId, values]) => values.filter(item => (!userId || candidateUserId === userId) && (!status || item.status === status)).map(item => ({ ...item, userId: candidateUserId, user: referralUserPublic(candidateUserId), groupName: membershipGroup(item)?.name || '会员', planName: plans.find(plan => plan.id === item.planId)?.name || null }))).sort((a, b) => new Date(b.createdAt || b.startsAt || 0) - new Date(a.createdAt || a.startsAt || 0))
         const paging = Object.fromEntries(url.searchParams); if (!paging.pageSize) paging.pageSize = paging.limit || 100
         const page = paginate(items, paging); return json(res, 200, page)
       }
@@ -2503,7 +2650,23 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, record)
       }
       const adminPostMatch = url.pathname.match(/^\/api\/v1\/admin\/posts(?:\/([^/]+))?$/)
-      if (adminPostMatch && req.method === 'GET') return json(res, 200, { items: posts })
+      if (adminPostMatch && req.method === 'GET' && adminPostMatch[1]) {
+        const post = posts.find(item => item.id === adminPostMatch[1])
+        if (!post) return json(res, 404, { message: '内容不存在' })
+        return json(res, 200, { ...post, contentHtml: contentHtml(post), reports: reports.filter(report => report.postId === post.id).length })
+      }
+      if (adminPostMatch && req.method === 'GET') {
+        const status = String(url.searchParams.get('status') || '').trim()
+        const query = String(url.searchParams.get('q') || '').trim().toLowerCase()
+        const time = post => new Date(post.submittedAt || post.publishedAt || post.updatedAt || 0).getTime() || 0
+        const statusCounts = posts.reduce((counts, post) => { const key = post.status || 'published'; counts[key] = (counts[key] || 0) + 1; return counts }, {})
+        const items = posts
+          .filter(post => (!status || (post.status || 'published') === status) && (!query || [post.id, post.title, post.excerpt, post.author?.name, post.author?.id, post.project, post.skill].some(value => String(value || '').toLowerCase().includes(query))))
+          .sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || time(b) - time(a))
+          .map(post => ({ ...post, content: undefined, contentLength: plainTextFromContent(post.content).length, imageCount: new Set([...normalizeUploadedImages(post.images), ...inlineImageUrls(post.content)]).size, pendingReports: reports.filter(report => report.postId === post.id && report.status === 'pending').length }))
+        const page = paginate(items, { pageSize: 100, ...Object.fromEntries(url.searchParams) })
+        return json(res, 200, { ...page, statusCounts, total: items.length })
+      }
       if (adminPostMatch && req.method === 'POST' && !adminPostMatch[1]) {
         const input = await readBody(req)
         // Project and skill are legacy metadata. The current publishing flow only
@@ -2567,6 +2730,27 @@ const server = http.createServer(async (req, res) => {
         }
         appendAudit(req, 'update', 'post_monetization', post.id, { accessType: post.accessType, pricePoints: post.pricePoints, memberPlanIds: post.memberPlanIds }); await persistStore(); return json(res, 200, { ...post, ...accessFor(post, null) })
       }
+      const adminTagItemMatch = url.pathname.match(/^\/api\/v1\/admin\/tags\/([^/]+)\/([^/]+)$/)
+      if (adminTagItemMatch && (req.method === 'PATCH' || req.method === 'DELETE')) {
+        const dimension = decodeURIComponent(adminTagItemMatch[1]); let name
+        try { name = decodeURIComponent(adminTagItemMatch[2]) } catch { return json(res, 400, { message: '标签名称无效' }) }
+        if (!tags[dimension]) return json(res, 422, { message: '标签维度无效' })
+        const index = tags[dimension].indexOf(name)
+        if (index < 0) return json(res, 404, { message: '标签不存在' })
+        if (req.method === 'DELETE') {
+          tags[dimension].splice(index, 1)
+          appendAudit(req, 'delete', 'tag', `${dimension}:${name}`, { dimension, name })
+          await persistStore(); return json(res, 200, { deleted: true, dimension, name })
+        }
+        const input = await readBody(req); const nextName = String(input.name || '').trim().slice(0, 40)
+        if (!nextName) return json(res, 422, { message: '标签名称不能为空' })
+        if (nextName !== name && tags[dimension].includes(nextName)) return json(res, 409, { message: '标签已存在' })
+        tags[dimension][index] = nextName
+        let updatedPosts = 0
+        for (const post of posts) if (post[dimension] === name) { post[dimension] = nextName; updatedPosts += 1 }
+        appendAudit(req, 'rename', 'tag', `${dimension}:${nextName}`, { dimension, from: name, to: nextName, updatedPosts })
+        await persistStore(); return json(res, 200, { dimension, name: nextName, updatedPosts })
+      }
       const adminTagsMatch = url.pathname.match(/^\/api\/v1\/admin\/tags\/([^/]+)$/)
       if (adminTagsMatch && req.method === 'GET') { const dimension = adminTagsMatch[1]; return json(res, 200, { dimension, items: tags[dimension] || [] }) }
       if (adminTagsMatch && req.method === 'POST') {
@@ -2578,7 +2762,11 @@ const server = http.createServer(async (req, res) => {
       const post = posts.find(item => item.id === postMatch[1])
       if (!post || post.status !== 'published') return json(res, 404, { message: 'Post not found' })
       const access = accessFor(post, user?.id || null)
-      return json(res, 200, { ...post, ...access, content: access.canRead ? contentHtml(post) : '', comments: visibleComments(post.id, { pageSize: 20 }).items })
+      const viewerId = user?.id || null
+      const interacted = type => Boolean(viewerId && interactions.get(`${post.id}:${viewerId}:${type}`))
+      const viewer = viewerId ? { liked: interacted('like'), favorited: interacted('favorite'), anchored: interacted('anchor'), purchased: hasContentEntitlement(viewerId, post.id), isAuthor: post.author?.id === viewerId } : { liked: false, favorited: false, anchored: false, purchased: false, isAuthor: false }
+      const summary = summaryPost(post, viewerId)
+      return json(res, 200, { ...summary, content: access.canRead ? contentHtml(post) : '', viewer, comments: visibleComments(post.id, { pageSize: 20 }).items })
     }
     if (req.method === 'GET' && postShareMatch) {
       const post = posts.find(item => item.id === postShareMatch[1])
@@ -2613,7 +2801,8 @@ const server = http.createServer(async (req, res) => {
       if (!parent) return json(res, 404, { message: 'Parent comment not found' })
       const parentPost = posts.find(candidate => candidate.id === parentPostId)
       if (!parentPost || parentPost.status !== 'published') return json(res, 404, { message: 'Post not found' })
-      const item = { id: id('comment'), parentId: parent.id, user: { id: user.id, name: user.name }, content: content.slice(0, 1000), createdAt: new Date().toISOString(), status: 'published' }
+      const commenter = profileFor(user)
+      const item = { id: id('comment'), parentId: parent.id, user: { id: user.id, name: commenter.name, avatarUrl: commenter.avatarUrl || null }, content: content.slice(0, 1000), createdAt: new Date().toISOString(), status: 'published' }
       const list = comments.get(parentPostId) || []
       comments.set(parentPostId, [...list, item])
       parentPost.counts.comments = Number(parentPost.counts.comments || 0) + 1
@@ -2627,7 +2816,8 @@ const server = http.createServer(async (req, res) => {
       const input = await readBody(req); const list = comments.get(commentMatch[1]) || []
       const parentId = input.parentId ? String(input.parentId) : null
       if (parentId && !list.some(comment => comment.id === parentId && comment.status !== 'deleted')) return json(res, 422, { message: '回复目标不存在' })
-      const item = { id: id('comment'), parentId, user: { id: user.id, name: user.name }, content: String(input.content || '').trim().slice(0, 1000), createdAt: new Date().toISOString(), status: 'published' }
+      const commenter = profileFor(user)
+      const item = { id: id('comment'), parentId, user: { id: user.id, name: commenter.name, avatarUrl: commenter.avatarUrl || null }, content: String(input.content || '').trim().slice(0, 1000), createdAt: new Date().toISOString(), status: 'published' }
       if (!item.content) return json(res, 422, { message: '评论不能为空' })
       comments.set(commentMatch[1], [...list, item])
       post.counts.comments = Number(post.counts.comments || 0) + 1
@@ -2640,8 +2830,8 @@ const server = http.createServer(async (req, res) => {
       if (!post || post.status !== 'published') return json(res, 404, { message: 'Post not found' })
       const key = `${postId}:${user.id}:${type}`
       const active = req.method === 'POST'
-      const previous = interactions.get(key) === true
-      if (active && !previous) { interactions.set(key, true); post.counts[type === 'like' ? 'likes' : type === 'favorite' ? 'favorites' : 'anchors'] += 1 }
+      const previous = Boolean(interactions.get(key))
+      if (active && !previous) { interactions.set(key, nowIso()); post.counts[type === 'like' ? 'likes' : type === 'favorite' ? 'favorites' : 'anchors'] += 1 }
       if (!active && previous) { interactions.delete(key); post.counts[type === 'like' ? 'likes' : type === 'favorite' ? 'favorites' : 'anchors'] = Math.max(0, post.counts[type === 'like' ? 'likes' : type === 'favorite' ? 'favorites' : 'anchors'] - 1) }
       await persistStore(); return json(res, 200, { active, counts: post.counts })
     }

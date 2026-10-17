@@ -3,76 +3,112 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="format-detection" content="telephone=no">
   <title>发布内容 · 月入万刀</title>
   <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
-  <link rel="stylesheet" href="styles.css?v=20261016g">
-  <link rel="stylesheet" href="publish.css?v=20261017ui7">
+  <link rel="preload" href="assets/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css?v=20261017r1">
 </head>
-<body class="publish-page">
-  <header class="topbar">
-    <div class="brand"><img class="brand-logo" src="assets/iyesh-logo.webp" alt=""><span>月入万刀</span></div>
-    <nav class="primary-nav" aria-label="主导航"><a href="index.html">首页</a><a href="index.html">内容检索</a><a class="active" aria-current="page">发布内容</a><a href="membership.html">会员中心</a></nav>
-    <div class="top-actions"><a class="avatar" href="profile.html" aria-label="个人中心">林</a></div>
-  </header>
-
-  <main class="shell publish-shell publish-shell-compact">
-    <div class="publish-heading">
-      <div>
-        <h1>发布内容</h1>
-      </div>
-      <div class="publish-heading-actions">
-        <span id="draftStatus" class="draft-status">未保存</span>
-        <button id="saveDraftBtn" class="secondary-btn heading-action" type="button">保存草稿</button>
-        <button class="primary-btn heading-action" type="submit" form="publishForm">提交审核</button>
+<body data-page="publish" class="publish-page">
+  <header class="publish-top">
+    <div class="container">
+      <a class="icon-btn" href="index.html" id="exitBtn" aria-label="离开编辑" data-icon="back"></a>
+      <h1 id="pageTitle">发布内容</h1>
+      <span class="save-state" id="saveState" role="status"><span class="dot"></span><span class="text">未保存</span></span>
+      <div class="actions">
+        <button class="btn btn--sm btn--ghost" type="button" data-cmd="preview" data-icon="eye">预览</button>
+        <button class="btn btn--sm" type="button" data-cmd="draft">存草稿</button>
+        <button class="btn btn--sm btn--primary" type="button" data-cmd="submit">提交审核</button>
       </div>
     </div>
+  </header>
 
-    <form id="publishForm" class="publish-editor publish-editor-compact">
-      <section class="publish-block publish-basic-block">
-        <div class="publish-block-title"><h2>基础信息</h2><span>必填</span></div>
-        <label class="field field-wide"><span>标题</span><input name="title" maxlength="120" placeholder="写一个清楚的标题" required><small class="field-help"><span></span><span data-count-for="title">0 / 120</span></small></label>
-        <label class="field field-wide"><span>摘要</span><textarea name="excerpt" maxlength="300" rows="2" placeholder="一句话说明内容价值"></textarea><small class="field-help"><span></span><span data-count-for="excerpt">0 / 300</span></small></label>
+  <main class="page-main">
+    <div class="container">
+      <section class="sheet gate" id="gate" hidden>
+        <svg class="icon" viewBox="0 0 24 24" style="width:40px;height:40px;color:var(--cobalt)" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>
+        <h1>登录后发布内容</h1>
+        <p>你的投稿会先进入审核，通过后出现在发现页。</p>
+        <a class="btn btn--primary" id="gateLogin" href="login.html?return=%2Fpublish.html">登录 / 注册</a>
       </section>
 
-      <section id="bodyEditor" class="publish-block publish-body-block">
-        <div class="publish-block-title">
-          <h2>正文</h2>
-          <div class="body-tools"><span>选填</span><button id="bodyInlineUpload" class="body-inline-upload" type="button">＋ 添加图片</button></div>
-        </div>
-        <div id="bodyPreview" class="body-preview" hidden>
-          <div class="body-preview-head"><span>正文预览</span><span>实时</span></div>
-          <div id="bodyPreviewContent" class="body-preview-content"></div>
-        </div>
-        <label class="field field-wide"><span>正文内容</span><textarea name="content" class="content-editor" maxlength="20000" rows="12" placeholder="写下经验、步骤或案例"></textarea><small class="field-help"><span></span><span data-count-for="content">0 / 20000</span></small></label>
-        <div class="media-panel media-panel-compact">
-          <div class="media-panel-head"><span class="media-title">正文图片</span><span id="mediaCount" class="media-limit">0 / 8 张 · 单张不超过 5MB</span></div>
-          <div class="media-grid media-grid-body">
-            <label class="upload-dropzone body-upload"><input id="bodyImageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple><span class="upload-plus">＋</span><strong>添加图片</strong></label>
+      <div id="notices"></div>
+
+      <div class="publish-layout" id="layout" hidden>
+        <section class="sheet editor" aria-label="编辑器">
+          <label class="sr-only" for="titleInput">标题</label>
+          <textarea class="editor-title" id="titleInput" rows="1" maxlength="120" placeholder="标题：一句话说清楚这套打法" enterkeyhint="next"></textarea>
+          <label class="sr-only" for="excerptInput">摘要</label>
+          <textarea class="editor-excerpt" id="excerptInput" rows="1" maxlength="300" placeholder="摘要（选填）：显示在列表里，付费或会员内容建议填写"></textarea>
+          <div class="editor-meta"><span id="titleCount">标题 0/120</span><span id="excerptCount">摘要 0/300</span></div>
+          <div class="editor-toolbar" role="toolbar" aria-label="正文格式">
+            <button class="tool-btn" type="button" data-format="heading" data-icon="heading">小标题</button>
+            <button class="tool-btn" type="button" data-format="list" data-icon="list">列表</button>
+            <button class="tool-btn" type="button" data-format="ordered" data-icon="ordered">步骤</button>
+            <button class="tool-btn" type="button" data-format="quote" data-icon="quote">引用</button>
+            <button class="tool-btn" type="button" data-format="bold" data-icon="bold">加粗</button>
+            <span class="tool-sep" aria-hidden="true"></span>
+            <button class="tool-btn tool-btn--image" type="button" data-cmd="image" data-icon="image">插入图片</button>
           </div>
-          <div id="bodyImageList" class="body-image-list"></div>
-          <p id="uploadMessage" class="upload-message" role="status"></p>
-        </div>
-      </section>
+          <div class="blocks" id="blocks"></div>
+          <div class="insert-row">
+            <button class="btn btn--sm" type="button" data-cmd="add-text" data-icon="text">加一段文字</button>
+            <button class="btn btn--sm" type="button" data-cmd="image" data-icon="image">加图片</button>
+          </div>
+          <div class="editor-foot"><span id="wordCount">正文 0 字</span><span id="imageCount">图片 0/20</span></div>
+          <input type="file" id="fileInput" accept="image/*" multiple hidden>
+        </section>
 
-      <section class="publish-block access-section publish-access-block">
-        <div class="publish-block-title"><h2>访问权限</h2><span>必填</span></div>
-        <div class="form-row form-row-access">
-          <label class="field"><span>可见范围</span><select name="accessType"><option value="free">免费公开</option><option value="member">会员专享</option><option value="paid">积分付费</option></select></label>
-          <label class="field"><span>价格（积分）</span><input name="pricePoints" type="number" min="0" step="1" value="0" placeholder="0"></label>
-        </div>
-        <div id="memberPlanField" class="field member-plan-field" hidden>
-          <span>会员等级 <small>可选</small></span>
-          <div id="memberPlanOptions" class="plan-options" role="group" aria-label="会员等级"></div>
-          <small id="memberPlanHint" class="field-help">留空表示全部会员</small>
-        </div>
-      </section>
+        <aside class="settings" aria-label="发布设置">
+          <section class="sheet setting-block">
+            <h2>内容分类</h2>
+            <p class="hint">选对方向，读者更容易找到你。</p>
+            <div class="field"><span class="label">方向</span><div class="chip-row" id="projectChips"></div></div>
+            <div class="field" style="margin-top:14px"><span class="label">技能</span><div class="chip-row" id="skillChips"></div></div>
+          </section>
 
-      <div class="editor-footer editor-footer-compact">
-        <p id="publishMessage" class="form-message" role="status"></p>
+          <section class="sheet setting-block">
+            <h2>谁可以看</h2>
+            <p class="hint">付费和会员内容在列表里只显示标题和摘要。</p>
+            <div class="access-options" role="radiogroup" aria-label="可见范围">
+              <label class="access-option"><input type="radio" name="accessType" value="free" checked><span class="radio"></span><strong>免费公开</strong><span class="desc">所有人都能阅读全文</span></label>
+              <label class="access-option"><input type="radio" name="accessType" value="member"><span class="radio"></span><strong>会员专享</strong><span class="desc">开通会员后阅读</span></label>
+              <label class="access-option"><input type="radio" name="accessType" value="paid"><span class="radio"></span><strong>积分解锁</strong><span class="desc" id="paidDesc">读者用积分购买，积分归你</span></label>
+            </div>
+            <div class="access-extra" id="memberExtra" hidden>
+              <span class="label" style="font-weight:650;font-size:14px">限定会员套餐 <small class="hint">不选则所有会员可看</small></span>
+              <div class="chip-row" id="planChips"></div>
+            </div>
+            <div class="access-extra" id="paidExtra" hidden>
+              <label class="label" for="priceInput" style="font-weight:650;font-size:14px">解锁价格</label>
+              <div class="price-presets" id="pricePresets"></div>
+              <div class="price-input"><input class="input" id="priceInput" type="number" inputmode="numeric" min="1" max="1000000" step="1" placeholder="自定义"><span class="hint" id="priceUnit">积分</span></div>
+              <p class="field-error" id="priceError" hidden></p>
+            </div>
+          </section>
+
+          <section class="sheet setting-block">
+            <h2>发布前检查</h2>
+            <ul class="checklist" id="checklist"></ul>
+            <div class="submit-group" style="margin-top:18px">
+              <button class="btn btn--primary btn--block" type="button" data-cmd="submit">提交审核</button>
+              <div style="display:flex;gap:10px"><button class="btn btn--block" type="button" data-cmd="draft">存草稿</button><button class="btn btn--block" type="button" data-cmd="preview">预览</button></div>
+            </div>
+          </section>
+        </aside>
       </div>
-    </form>
-    <div id="submissionCard" class="submission-card submission-card-compact" hidden><p id="submissionText" class="sub"></p><a href="profile.html">查看我的内容 →</a></div>
+    </div>
   </main>
-  <script src="api-config.js?v=20261016api2"></script><script src="publish.js?v=20261017j4"></script><script src="nav.js"></script>
+
+  <div class="publish-bar" id="publishBar" hidden>
+    <button class="btn" type="button" data-cmd="draft">存草稿</button>
+    <button class="btn" type="button" data-cmd="preview">预览</button>
+    <button class="btn btn--primary" type="button" data-cmd="submit">提交审核</button>
+  </div>
+
+  <script src="api-config.js?v=20261017r1"></script>
+  <script src="core.js?v=20261017r1"></script>
+  <script src="publish.js?v=20261017r1"></script>
 </body>
 </html>

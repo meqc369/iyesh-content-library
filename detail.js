@@ -1,206 +1,377 @@
-const fallback = { post_1: { title: '累计开通 500+ YPP：YouTube 直播玩法开源', platform: 'YouTube', project: '出海', skill: 'AI', author: { name: 'Gary' }, date: '1天前', publishedAt: '1天前', excerpt: '把选题、直播和复盘拆成一套可复制的流程，适合刚开始做内容出海的团队。', accessType: 'paid', priceCents: 990, locked: true, counts: { anchors: 44, likes: 144, comments: 4, favorites: 51 }, content: '<p>这是一份用于演示的内容详情。正式版本会从服务端返回经过白名单过滤的富文本、图片和附件。</p><p>可以在这里继续承载正文、操作步骤和作者补充。</p>' } };
-Object.assign(fallback, {
-  post_2: { ...fallback.post_1, title: '从 0 到 1 做一个垂直小号的完整记录', platform: '小红书', project: '垂直小号', skill: '自媒体', author: { name: '小满' }, date: '2天前', accessType: 'member', requiredPlanName: '创作者会员', locked: true },
-  post_3: { ...fallback.post_1, title: 'AI 工作流如何接入日常内容生产', platform: '公众号', project: 'AI自媒体', skill: 'AI工作流', author: { name: '林默' }, date: '3天前', accessType: 'paid', priceCents: 900, locked: true },
-  post_4: { ...fallback.post_1, title: '一套跨境电商素材管理方法', platform: 'TikTok', project: '电商', skill: 'AI视频', author: { name: '周予' }, date: '5天前', accessType: 'free', priceCents: 0, locked: false },
-  post_5: { ...fallback.post_1, title: 'Codex 辅助项目开发的实践清单', platform: 'X', project: 'AI产品开发', skill: 'Codex', author: { name: '苏然' }, date: '1周前', accessType: 'member', requiredPlanName: '创作者会员', locked: true },
-  post_6: { ...fallback.post_1, title: '做内容之前，先把用户问题说清楚', platform: 'B站', project: '自媒体', skill: '生财认知', author: { name: '闻舟' }, date: '1周前', accessType: 'free', priceCents: 0, locked: false }
-});
-const id = new URLSearchParams(location.search).get('id') || 'post_1';
-const apiBase = window.CONTENT_API_BASE || 'http://127.0.0.1:8787';
-const detail = document.querySelector('#detail');
-const commentsEl = document.querySelector('#comments');
-const toastEl = document.querySelector('#toast');
-const commentSortEl = document.querySelector('#commentSort');
-const commentLoadMore = document.querySelector('#commentLoadMore');
-const commentRefresh = document.querySelector('#markCommentRefresh');
-let currentComments = [];
-let currentPost = null;
-let commentSort = 'latest';
-let commentVisibleCount = 6;
-let commentsCursor = null;
-let commentsHasMore = false;
-let pointUnitName = '积分';
-const REQUEST_TIMEOUT_MS = 6500;
-try {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
-  const avatar = document.querySelector('.top-actions .avatar');
-  if (avatar && currentUser) { avatar.textContent = String(currentUser.name || currentUser.nickname || '林').slice(0, 1); avatar.title = currentUser.name || currentUser.nickname || '个人中心'; }
-} catch {}
-function authHeaders() { const token = localStorage.getItem('accessToken'); return token ? { Authorization: `Bearer ${token}` } : {}; }
-function toast(message) { toastEl.textContent = message; toastEl.classList.add('show'); setTimeout(() => toastEl.classList.remove('show'), 1600); }
-function escapeHtml(value) { return String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
-function setSocialMeta(post) {
-  const title = String(post?.title || '内容详情 · 月入万刀');
-  const description = String(post?.excerpt || '月入万刀实战内容详情');
-  const image = !post?.locked && post?.coverImage ? mediaUrl(post.coverImage) : new URL('assets/iyesh-logo.webp', location.href).href;
-  document.title = `${title} · 月入万刀`;
-  const values = { description, 'og:title': title, 'og:description': description, 'og:url': location.href, 'og:image': image };
-  Object.entries(values).forEach(([key, value]) => {
-    const attr = key.startsWith('og:') ? 'property' : 'name';
-    let meta = document.head.querySelector(`meta[${attr}="${key}"]`);
-    if (!meta) { meta = document.createElement('meta'); meta.setAttribute(attr, key); document.head.appendChild(meta); }
-    meta.setAttribute('content', value);
-  });
-}
-const platformTones = {
-  'YouTube': 'platform-youtube', 'YouTube Shorts': 'platform-youtube', '小红书': 'platform-xhs',
-  '视频号': 'platform-video', '公众号': 'platform-wechat-official', '微信': 'platform-wechat',
-  '抖音': 'platform-douyin', 'TikTok': 'platform-tiktok', '闲鱼': 'platform-xianyu',
-  'X': 'platform-x', 'Reddit': 'platform-reddit', 'B站': 'platform-bilibili',
-  '快手': 'platform-kuaishou', '线下实体': 'platform-offline'
-};
-function platformTone(value) { return platformTones[String(value || '').trim()] || 'platform-neutral'; }
-function mediaUrl(url) { return /^https?:\/\//i.test(String(url || '')) ? url : `${apiBase}${String(url || '').startsWith('/') ? '' : '/'}${url || ''}`; }
-function resolveContentMedia(html) { return String(html || '').replace(/(src=["'])(\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]*)(["'])/g, (_match, prefix, url, suffix) => `${prefix}${escapeHtml(mediaUrl(url))}${suffix}`); }
-function pricePoints(post) { return Number(post.pricePoints ?? post.priceCents ?? 0); }
-function pointUnit(post) { return post.priceUnitName || post.pointsUnitName || pointUnitName; }
-function accessType(post) { return post.accessType || (post.memberOnly ? 'member' : pricePoints(post) ? 'paid' : 'free'); }
-function accessLabel(post) { const type = accessType(post); return type === 'member' ? `会员 · ${post.requiredPlanName || '会员专享'}` : type === 'paid' ? `付费 · ${pricePoints(post)} ${pointUnit(post)}` : '免费'; }
-function displayDate(post) {
-  if (post?.date) return String(post.date);
-  const raw = String(post?.publishedAt || '').trim();
-  if (!raw) return '最近发布';
-  if (/^(刚刚|今天|昨天|前天|\d+\s*(分钟|小时|天|周|月|年)前)$/.test(raw)) return raw;
-  const parsed = Date.parse(raw);
-  return Number.isNaN(parsed) ? '最近发布' : new Date(parsed).toLocaleDateString('zh-CN');
-}
-function render(post) {
-  currentPost = post;
-  const date = displayDate(post);
-  const author = typeof post.author === 'string' ? post.author : post.author?.name;
-  const counts = post.counts || {};
-  const type = accessType(post);
-  const locked = Boolean(post.locked);
-  const paywall = locked ? `<div class="detail-paywall"><div><strong>${type === 'member' ? '会员专享内容' : `${escapeHtml(pointUnit(post))}购买后查看`}</strong><span>${type === 'member' ? `开通${escapeHtml(post.requiredPlanName || '会员')}即可阅读` : `需要 ${pricePoints(post)} ${escapeHtml(pointUnit(post))}`}</span></div><button data-action="${type === 'member' ? 'membership' : 'buy'}">${type === 'member' ? '开通会员' : '立即购买'}</button></div>` : '';
-  const body = locked ? `<p class="sub">${escapeHtml(post.excerpt || '这篇内容需要对应权益后查看。')}</p>` : resolveContentMedia(post.content || `<p>${escapeHtml(post.excerpt)}</p>`);
-  const cover = !locked && post.coverImage ? `<img class="detail-cover" src="${escapeHtml(mediaUrl(post.coverImage))}" alt="${escapeHtml(post.title)}封面" loading="lazy">` : '';
-  detail.innerHTML = `<div class="card-top"><span>${escapeHtml(author || '用户')}</span><span>·</span><span>${escapeHtml(date)}</span><span class="access-badge ${type === 'member' ? 'member-access' : type === 'paid' ? 'paid-access' : 'free-access'}">${escapeHtml(accessLabel(post))}</span></div><h1>${escapeHtml(post.title)}</h1>${cover}${paywall}<div class="detail-content">${body}</div><div class="meta"><span>⚓ ${Number(counts.anchors || 0)}</span><span>♡ ${Number(counts.likes || 0)}</span><span>◌ ${Number(counts.comments || 0)}</span><span>☆ ${Number(counts.favorites || 0)}</span></div><div class="detail-actions"><button data-action="anchor">投锚</button><button data-action="like">点赞</button><button data-action="favorite">收藏</button><button data-action="share" class="share-trigger">分享</button><button data-action="tip">${escapeHtml(pointUnitName)}打赏</button><button data-action="report" class="subtle-action">举报</button></div>`;
-}
-async function request(path, options = {}) {
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  let response;
-  try { response = await fetch(`${apiBase}${path}`, { ...options, signal: controller.signal, headers: { ...authHeaders(), ...(options.body ? { 'content-type': 'application/json' } : {}), ...(options.headers || {}) } }); } catch (error) { if (error.name === 'AbortError') throw new Error('服务响应较慢，请稍后重试'); throw error; } finally { clearTimeout(timer); }
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) { const error = new Error(body.message || `请求失败 ${response.status}`); error.status = response.status; throw error; }
-  return body;
-}
-async function requireLogin() { if (localStorage.getItem('accessToken')) return true; toast('请先登录'); setTimeout(() => { location.href = `login.html?return=${encodeURIComponent(location.href)}`; }, 300); return false; }
-async function buyPost() { if (!(await requireLogin())) return; try { await request(`/api/v1/posts/${encodeURIComponent(id)}/purchase`, { method: 'POST', body: JSON.stringify({}) }); toast(`${pointUnitName}购买成功，正在刷新内容`); await load(); } catch (error) { toast(error.message || `${pointUnitName}购买暂时不可用`); } }
-async function openMembership() { location.href = `membership.html?return=${encodeURIComponent(location.href)}`; }
-async function getPointsSummary() {
-  for (const path of ['/api/v1/me/points', '/api/v1/points/balance', '/api/v1/me/points/balance']) {
-    try {
-      const body = await request(path);
-      const wallet = body.wallet || body.points || body;
-      return { balance: Number(wallet.balance ?? wallet.pointsBalance ?? wallet.amount ?? 0), unitName: wallet.unitName || wallet.unit || body.unitName || '积分' };
-    } catch (error) { if (![404, 405].includes(error.status)) throw error; }
+/* 内容详情：正文、付费墙、互动、打赏、评论 */
+(function () {
+  'use strict';
+  const App = window.App;
+  const { api, icon, escapeHtml, toast, relativeTime, dateText, compact, accessInfo, topicsOf, avatarHtml, session, num } = App;
+
+  const postId = new URLSearchParams(location.search).get('id') || '';
+  const article = document.querySelector('#article');
+  const rail = document.querySelector('#actionRail');
+  const bar = document.querySelector('#actionBar');
+  const aside = document.querySelector('#detailAside');
+  let post = null;
+  let unitName = '积分';
+  let comments = [];
+  let commentSort = 'latest';
+  let commentCursor = null;
+  let commentHasMore = false;
+  let commentTotal = 0;
+  let replyTarget = null;
+  let busy = new Set();
+
+  const backLink = () => {
+    let sameOrigin = false;
+    try { sameOrigin = Boolean(document.referrer) && new URL(document.referrer).origin === location.origin && !/login\.html/.test(document.referrer); } catch {}
+    return sameOrigin;
+  };
+
+  function setMeta() {
+    const title = post?.title || '内容详情';
+    const description = post?.excerpt || '月入万刀实战内容';
+    document.title = `${title} · 月入万刀`;
+    const image = post?.thumbnail ? App.mediaUrl(post.thumbnail) : new URL('assets/iyesh-logo.webp', location.href).href;
+    const values = { description, 'og:title': title, 'og:description': description, 'og:url': location.href, 'og:image': image };
+    Object.entries(values).forEach(([key, value]) => {
+      const attr = key.startsWith('og:') ? 'property' : 'name';
+      let meta = document.head.querySelector(`meta[${attr}="${key}"]`);
+      if (!meta) { meta = document.createElement('meta'); meta.setAttribute(attr, key); document.head.appendChild(meta); }
+      meta.setAttribute('content', value);
+    });
   }
-  return { balance: 0, unitName: '积分' };
-}
-async function tipAuthor() {
-  if (!(await requireLogin())) return;
-  try {
-    const summary = await getPointsSummary();
-    const balance = summary.balance; const unit = summary.unitName;
-    const amountPoints = Number(window.prompt(`输入打赏${unit}（当前余额 ${balance} ${unit}）`, '10'));
-    if (!Number.isInteger(amountPoints) || amountPoints <= 0) return;
-    if (balance < amountPoints) return toast(`${unit}不足，当前余额 ${balance} ${unit}`);
-    const message = window.prompt('留言（可选）', '') || '';
-    try { await request('/api/v1/tips', { method: 'POST', body: JSON.stringify({ postId: id, points: amountPoints, amountPoints, message }) }); } catch (error) { if (error.status !== 404) throw error; await request('/api/v1/tips/orders', { method: 'POST', body: JSON.stringify({ postId: id, points: amountPoints, amountPoints, message }) }); }
-    toast(`已用 ${amountPoints} ${unit}支持作者`);
-    await load();
-  } catch (error) { toast(error.message || '积分打赏暂时不可用'); }
-}
-async function reportPost() { if (!(await requireLogin())) return; const reason = window.prompt('举报原因（如广告、侵权、违规内容）', '违规内容'); if (!reason?.trim()) return; const detail = window.prompt('补充说明（可选）', '') || ''; try { await request(`/api/v1/posts/${encodeURIComponent(id)}/report`, { method: 'POST', body: JSON.stringify({ reason: reason.trim(), detail: detail.trim() }) }); toast('举报已提交，感谢你的反馈'); } catch (error) { toast(error.message || '举报暂时不可用'); } }
-function sortComments(items) {
-  const replies = new Map();
-  items.forEach(item => { if (item.parentId) replies.set(item.parentId, (replies.get(item.parentId) || 0) + 1); });
-  return [...items].sort((left, right) => {
-    if (commentSort === 'hot') {
-      const hotLeft = (replies.get(left.id) || 0) * 10 + new Date(left.createdAt || 0).getTime();
-      const hotRight = (replies.get(right.id) || 0) * 10 + new Date(right.createdAt || 0).getTime();
-      return hotRight - hotLeft;
+
+  function authorOf(item) { return typeof item.author === 'string' ? { name: item.author } : (item.author || {}); }
+
+  /* ---------------- article ---------------- */
+  function paywallHtml() {
+    const access = accessInfo(post, unitName);
+    if (access.type === 'member') {
+      return `<section class="note note--seal paywall paywall--member" aria-label="会员专享">
+        <div class="face">会员<small>专享内容</small></div>
+        <h2 style="margin-top:14px">${escapeHtml(post.requiredPlanName && post.requiredPlanName !== '会员' ? `开通「${post.requiredPlanName}」后阅读全文` : '开通会员后阅读全文')}</h2>
+        <p>会员可阅读全部会员专享打法，有效期内不限次数。</p>
+        <div class="actions"><a class="btn btn--seal" href="membership.html?return=${encodeURIComponent(location.pathname + location.search)}">查看会员方案</a>${session.loggedIn() ? '' : `<a class="text-btn" href="${App.loginUrl()}">已是会员？登录</a>`}</div>
+      </section>`;
     }
-    const leftTime = new Date(left.createdAt || 0).getTime();
-    const rightTime = new Date(right.createdAt || 0).getTime();
-    return commentSort === 'oldest' ? leftTime - rightTime : rightTime - leftTime;
-  });
-}
-function renderComments(items) {
-  currentComments = Array.isArray(items) ? items : [];
-  const sorted = sortComments(currentComments);
-  const visible = sorted.slice(0, commentVisibleCount);
-  document.querySelector('#commentCount').textContent = `${currentComments.length} 条`;
-  if (commentLoadMore) {
-    commentLoadMore.hidden = !commentsHasMore && sorted.length <= visible.length;
-    commentLoadMore.textContent = commentLoadMore.hidden ? '已全部加载' : '加载更多评论';
+    return `<section class="note paywall" aria-label="积分解锁">
+      <div class="face num">${num(access.price)}<small>${escapeHtml(access.unit)}</small></div>
+      <h2 style="margin-top:14px">解锁后阅读全文</h2>
+      <p>一次解锁，长期可读。积分会直接支持作者。</p>
+      <div class="actions"><button class="btn btn--money" type="button" data-action="buy">用 ${num(access.price)} ${escapeHtml(access.unit)}解锁</button><span class="balance" id="balanceHint"></span></div>
+    </section>`;
   }
-  commentsEl.innerHTML = visible.length ? visible.map(item => `<div class="comment ${item.parentId ? 'reply' : ''}"><strong>${escapeHtml(item.user?.name || '用户')}</strong><span>${escapeHtml(item.createdAt ? new Date(item.createdAt).toLocaleString('zh-CN') : '')}</span><p>${escapeHtml(item.content)}</p><div class="comment-actions"><button class="reply-btn" data-reply-id="${escapeHtml(item.id)}">回复</button><button class="comment-action" data-comment-report-id="${escapeHtml(item.id)}">举报</button></div></div>`).join('') : '<p class="sub">还没有评论。</p>';
-}
-async function loadComments(reset = true) {
-  if (reset) { commentsCursor = null; commentsHasMore = false; }
-  try {
-    const params = new URLSearchParams({ sort: commentSort, pageSize: '20' });
-    if (!reset && commentsCursor) params.set('cursor', commentsCursor);
-    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    let response;
-    try { response = await fetch(`${apiBase}/api/v1/posts/${encodeURIComponent(id)}/comments?${params}`, { signal: controller.signal, headers: authHeaders() }); } finally { clearTimeout(timer); }
-    if (!response.ok) throw new Error('comments failed');
-    const body = await response.json();
-    currentComments = reset ? (body.items || []) : [...currentComments, ...(body.items || [])];
-    commentsCursor = body.nextCursor || null;
-    commentsHasMore = Boolean(body.hasMore);
-    commentVisibleCount = currentComments.length;
-    renderComments(currentComments);
-  } catch {
-    if (reset) { commentsHasMore = false; renderComments(currentPost?.comments || []); }
-    else toast('评论加载失败，请稍后重试');
-  }
-}
-async function load() { try { const config = await request('/api/v1/points/config'); pointUnitName = config.unitName || config.unit || pointUnitName; } catch {} let post = fallback[id]; let remoteUnavailable = false; try { const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS); let response; try { response = await fetch(`${apiBase}/api/v1/posts/${encodeURIComponent(id)}`, { signal: controller.signal, headers: authHeaders() }); } finally { clearTimeout(timer); } if (response.ok) post = await response.json(); else if (response.status === 404) post = null; } catch { remoteUnavailable = true; } if (!post) { detail.innerHTML = '<p class="sub">内容不存在或已下线。</p>'; document.querySelector('#commentForm').hidden = true; renderComments([]); return; } setSocialMeta(post); render(post); if (remoteUnavailable) { detail.insertAdjacentHTML('afterbegin', '<div class="remote-error" id="detailRemoteError"><span>服务响应较慢，当前显示缓存内容。</span><button type="button" id="retryDetail">重试</button></div>'); } currentComments = post.comments || []; renderComments(currentComments); await loadComments(true); document.querySelector('#commentForm').hidden = Boolean(post.locked); }
-document.querySelector('#commentForm').addEventListener('submit', async event => { event.preventDefault(); const input = document.querySelector('#commentInput'); const content = input.value.trim(); if (!content) return; try { const response = await fetch(`${apiBase}/api/v1/posts/${encodeURIComponent(id)}/comments`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders() }, body: JSON.stringify({ content }) }); if (response.status === 401) return toast('请先登录后发表评论'); if (!response.ok) throw new Error('comment failed'); const item = await response.json(); renderComments([...currentComments, item]); input.value = ''; toast('评论已发布'); } catch { toast('评论暂时不可用，请稍后重试'); } });
-commentsEl.addEventListener('click', async event => {
-  const reportButton = event.target.closest('[data-comment-report-id]');
-  if (reportButton) {
-    if (!(await requireLogin())) return;
-    const reason = window.prompt('举报原因（如广告、辱骂、侵权）', '违规内容');
-    if (!reason?.trim()) return;
-    try {
-      const response = await fetch(`${apiBase}/api/v1/comments/${encodeURIComponent(reportButton.dataset.commentReportId)}/report`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders() }, body: JSON.stringify({ reason: reason.trim() }) });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.message || '举报失败');
-      reportButton.textContent = '已举报'; reportButton.disabled = true; toast('举报已提交');
-    } catch (error) { toast(error.message || '举报暂时不可用'); }
-    return;
-  }
-  const button = event.target.closest('[data-reply-id]');
-  if (!button) return;
-  const content = window.prompt('回复这条评论'); if (!content?.trim()) return;
-  try { const response = await fetch(`${apiBase}/api/v1/comments/${encodeURIComponent(button.dataset.replyId)}/replies`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders() }, body: JSON.stringify({ content: content.trim() }) }); if (response.status === 401) return toast('请先登录后回复'); if (!response.ok) throw new Error('reply failed'); const item = await response.json(); renderComments([...currentComments, item]); if (currentPost?.counts) currentPost.counts.comments += 1; toast('回复已发布'); } catch { toast('回复暂时不可用，请稍后重试'); }
-});
-detail.addEventListener('click', async event => {
-  if (event.target.closest('#retryDetail')) { await load(); return; }
-  const button = event.target.closest('[data-action]');
-  if (!button) return;
-  const action = button.dataset.action;
-  if (action === 'membership') return openMembership();
-  if (action === 'buy') return buyPost();
-  if (action === 'tip') return tipAuthor();
-  if (action === 'report') return reportPost();
-  if (action === 'share') {
-    if (typeof window.openShareSheet === 'function') {
-      const authorName = typeof currentPost?.author === 'string' ? currentPost.author : currentPost?.author?.name;
-      const shareUrl = typeof window.shareUrlForPost === 'function'
-        ? window.shareUrlForPost(currentPost?.id || id)
-        : location.href;
-      window.openShareSheet({ title: currentPost?.title, excerpt: currentPost?.excerpt, platform: currentPost?.platform, author: authorName, cover: !currentPost?.locked && currentPost?.coverImage ? mediaUrl(currentPost.coverImage) : '', url: shareUrl });
+
+  function renderArticle() {
+    const author = authorOf(post);
+    const access = accessInfo(post, unitName);
+    const topics = topicsOf(post);
+    const cover = post.coverImage || '';
+    article.setAttribute('aria-busy', 'false');
+    article.innerHTML = `
+      <a class="back-link" href="index.html" id="backLink">${icon('back')}${backLink() ? '返回' : '发现更多内容'}</a>
+      <header class="article-head">
+        ${topics.length || post.digest ? `<div class="topics">${post.digest ? '<span class="tag tag--digest">精华</span>' : ''}${topics.map(topic => `<a class="tag tag--info" href="index.html?${new URLSearchParams(topic === post.project ? { project: topic } : { skill: topic })}">#${escapeHtml(topic)}</a>`).join('')}</div>` : ''}
+        <h1>${escapeHtml(post.title)}</h1>
+        <div class="article-byline">${avatarHtml(author, 40)}<div class="who"><strong>${escapeHtml(author.name || '用户')}</strong><span>${escapeHtml(dateText(post.publishedAt))} 发布</span></div>${access.html}</div>
+      </header>
+      ${cover ? `<figure class="article-cover"><img src="${escapeHtml(App.mediaUrl(cover))}" alt="${escapeHtml(post.title)}"></figure>` : ''}
+      ${post.locked
+        ? `${post.excerpt ? `<p class="article-excerpt">${escapeHtml(post.excerpt)}</p>` : ''}${paywallHtml()}`
+        : `<div class="prose" id="prose">${post.content || `<p>${escapeHtml(post.excerpt || '')}</p>`}</div>`}
+      ${!post.locked && !post.viewer?.isAuthor ? `<section class="note tip-strip"><div class="copy"><strong>觉得有用？给作者一点${escapeHtml(unitName)}</strong><p>打赏会直接进入作者的${escapeHtml(unitName)}账户${post.counts?.tips ? `，已有 ${num(post.counts.tips)} 次打赏` : ''}。</p></div><button class="btn btn--money btn--sm" type="button" data-action="tip">${icon('coin')}打赏作者</button></section>` : ''}
+      <p class="article-foot"><button class="text-btn is-muted" type="button" data-action="report">${icon('flag')}举报这篇内容</button></p>
+      <section class="comments" id="comments" aria-label="评论">
+        <div class="comments-head"><h2>评论</h2><span class="num" id="commentTotal"></span>
+          <div class="segmented" role="group" aria-label="评论排序"><button type="button" data-sort="latest" aria-pressed="true">最新</button><button type="button" data-sort="hot" aria-pressed="false">最热</button><button type="button" data-sort="oldest" aria-pressed="false">最早</button></div>
+        </div>
+        ${post.locked ? `<p class="inline-alert inline-alert--info">${icon('lock')}<span>解锁内容后可以参与评论。</span></p>` : `
+        <form class="comment-composer" id="composer">
+          <div class="replying" id="replying" hidden><span></span><button class="text-btn" type="button" id="cancelReply">取消回复</button></div>
+          <label class="sr-only" for="commentInput">评论内容</label>
+          <textarea id="commentInput" maxlength="1000" rows="2" placeholder="${session.loggedIn() ? '说说你的看法，或补充你的经验' : '登录后参与评论'}"></textarea>
+          <div class="row"><span class="count num" id="commentCount">0 / 1000</span><button class="btn btn--primary btn--sm" type="submit">发表评论</button></div>
+        </form>`}
+        <div class="comment-list" id="commentList"></div>
+        <div style="display:flex;justify-content:center;padding-top:16px"><button class="btn btn--sm" type="button" id="moreComments" hidden>查看更多评论</button></div>
+      </section>`;
+    if (!post.locked) {
+      const input = article.querySelector('#commentInput');
+      App.autoGrow(input);
+      input.addEventListener('input', () => { article.querySelector('#commentCount').textContent = `${input.value.length} / 1000`; });
+      input.addEventListener('focus', () => { if (!session.loggedIn()) { input.blur(); App.goLogin(); } });
+      article.querySelectorAll('.prose img').forEach(image => {
+        // Uploads are served from the API origin when it differs from the page origin (local dev, separate API host).
+        const raw = image.getAttribute('src') || '';
+        if (raw.startsWith('/uploads/')) image.src = App.mediaUrl(raw);
+        image.addEventListener('click', () => App.viewImage(image.currentSrc || image.src));
+      });
     }
-    return;
+    if (post.locked && post.accessType === 'paid') loadBalance();
   }
-  try { const response = await fetch(`${apiBase}/api/v1/posts/${encodeURIComponent(id)}/${action}`, { method: 'POST', headers: authHeaders() }); if (response.status === 401) return toast('请先登录后操作'); if (!response.ok) throw new Error('interaction failed'); const result = await response.json(); currentPost.counts = result.counts; render(currentPost); toast(`${action === 'anchor' ? '已投锚' : action === 'like' ? '已点赞' : '已收藏'}`); } catch { toast('互动暂时不可用，请稍后重试'); }
-});
-commentSortEl?.addEventListener('change', async event => { commentSort = event.target.value; commentVisibleCount = 6; await loadComments(true); });
-commentLoadMore?.addEventListener('click', async () => { if (commentsHasMore) await loadComments(false); else { commentVisibleCount += 6; renderComments(currentComments); } });
-commentRefresh?.addEventListener('click', async () => { commentRefresh.disabled = true; try { await load(); toast('评论已刷新'); } finally { commentRefresh.disabled = false; } });
-load();
+
+  function interactionButtons(kind) {
+    const counts = post.counts || {};
+    const viewer = post.viewer || {};
+    const defs = [
+      ['like', 'heart', '点赞', viewer.liked, counts.likes],
+      ['favorite', 'star', '收藏', viewer.favorited, counts.favorites],
+      ['anchor', 'anchor', '投锚', viewer.anchored, counts.anchors]
+    ];
+    if (kind === 'rail') {
+      return defs.map(([action, iconName, label, active, count]) => `<button class="rail-btn" type="button" data-action="${action}" aria-pressed="${Boolean(active)}" aria-label="${label}"><span class="ring">${icon(iconName)}</span><span class="num">${count ? compact(count) : label}</span></button>`).join('')
+        + `<button class="rail-btn" type="button" data-action="comment" aria-label="评论"><span class="ring">${icon('comment')}</span><span class="num">${counts.comments ? compact(counts.comments) : '评论'}</span></button>`
+        + `<button class="rail-btn" type="button" data-action="share" aria-label="分享"><span class="ring">${icon('share')}</span><span>分享</span></button>`;
+    }
+    return `<button class="compose" type="button" data-action="comment">${post.locked ? '解锁后参与评论' : '写评论…'}</button>`
+      + defs.map(([action, iconName, label, active, count]) => `<button class="bar-btn" type="button" data-action="${action}" aria-pressed="${Boolean(active)}" aria-label="${label}">${icon(iconName)}<span>${count ? compact(count) : label}</span></button>`).join('')
+      + `<button class="bar-btn" type="button" data-action="share" aria-label="分享">${icon('share')}<span>分享</span></button>`;
+  }
+  function renderActions() {
+    rail.innerHTML = interactionButtons('rail');
+    bar.innerHTML = interactionButtons('bar');
+    bar.hidden = false;
+  }
+
+  function renderAside(related = []) {
+    const author = authorOf(post);
+    aside.innerHTML = `<section class="sheet author-card"><div class="row">${avatarHtml(author, 44)}<div><strong>${escapeHtml(author.name || '用户')}</strong><p class="hint">内容作者</p></div></div>${!post.locked && !post.viewer?.isAuthor ? `<button class="btn btn--sm btn--money" type="button" data-action="tip">${icon('coin')}打赏作者</button>` : ''}</section>
+      ${related.length ? `<section class="sheet side-card"><h3>相关内容</h3><div class="list" style="margin-top:6px">${related.map(item => `<a class="list-row" href="detail.html?id=${encodeURIComponent(item.id)}"><span class="main"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(authorOf(item).name || '')}　${escapeHtml(relativeTime(item.publishedAt))}</small></span></a>`).join('')}</div></section>` : ''}`;
+  }
+  async function loadRelated() {
+    try {
+      const body = await api('/api/v1/posts/search', { method: 'POST', body: { platformId: 'YouTube', projectId: post.project && post.project !== '未分类' ? post.project : undefined, sort: 'hot', pageSize: 6 } });
+      renderAside((body.items || []).filter(item => item.id !== post.id).slice(0, 4));
+    } catch { renderAside([]); }
+  }
+
+  async function loadBalance() {
+    const hint = document.querySelector('#balanceHint');
+    if (!hint) return;
+    if (!session.loggedIn()) { hint.innerHTML = `<a class="text-btn" href="${App.loginUrl()}">登录</a> 后解锁`; return; }
+    try { const body = await api('/api/v1/me/points'); hint.textContent = `当前余额 ${num(body.balance)} ${body.unitName || unitName}`; } catch {}
+  }
+
+  /* ---------------- comments ---------------- */
+  function commentHtml(item, nested = false) {
+    const user = item.user || {};
+    const mine = session.user()?.id && user.id === session.user().id;
+    return `<div class="comment" data-comment="${escapeHtml(item.id)}">
+      ${avatarHtml(user, nested ? 28 : 36)}
+      <div class="comment-body">
+        <div class="comment-meta"><strong>${escapeHtml(user.name || '用户')}</strong><time datetime="${escapeHtml(item.createdAt || '')}">${escapeHtml(relativeTime(item.createdAt))}</time></div>
+        <p class="comment-text">${item.replyTo ? `<span class="reply-to">@${escapeHtml(item.replyTo.name)}</span>` : ''}${escapeHtml(item.content)}</p>
+        <div class="comment-actions">${post.locked ? '' : `<button type="button" data-reply="${escapeHtml(item.id)}" data-name="${escapeHtml(user.name || '用户')}">回复</button>`}${mine ? `<button type="button" data-delete-comment="${escapeHtml(item.id)}">删除</button>` : `<button type="button" data-report-comment="${escapeHtml(item.id)}">举报</button>`}</div>
+        ${!nested && item.replies?.length ? `<div class="replies">${item.replies.map(reply => commentHtml(reply, true)).join('')}</div>` : ''}
+      </div>
+    </div>`;
+  }
+  function renderComments() {
+    const list = document.querySelector('#commentList');
+    if (!list) return;
+    document.querySelector('#commentTotal').textContent = commentTotal ? String(commentTotal) : '';
+    list.innerHTML = comments.length ? comments.map(item => commentHtml(item)).join('') : `<div class="empty">${icon('comment')}<p>${post.locked ? '还没有评论。' : '还没有评论，来说第一句吧。'}</p></div>`;
+    document.querySelector('#moreComments').hidden = !commentHasMore;
+    article.querySelectorAll('[data-sort]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.sort === commentSort)));
+  }
+  async function loadComments(reset = true) {
+    try {
+      const query = new URLSearchParams({ sort: commentSort, pageSize: '20', thread: '1' });
+      if (!reset && commentCursor) query.set('cursor', commentCursor);
+      const body = await api(`/api/v1/posts/${encodeURIComponent(postId)}/comments?${query}`);
+      comments = reset ? (body.items || []) : comments.concat(body.items || []);
+      commentCursor = body.nextCursor || null;
+      commentHasMore = Boolean(body.hasMore);
+      commentTotal = Number(body.total ?? comments.length);
+      renderComments();
+    } catch (error) { if (reset) { comments = []; renderComments(); } toast(error.message, 'error'); }
+  }
+  function setReply(target) {
+    replyTarget = target;
+    const banner = document.querySelector('#replying');
+    if (!banner) return;
+    banner.hidden = !target;
+    if (target) banner.querySelector('span').textContent = `回复 @${target.name}`;
+    const input = document.querySelector('#commentInput');
+    input.placeholder = target ? `回复 @${target.name}` : '说说你的看法，或补充你的经验';
+    if (target) { input.focus(); input.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  }
+  async function submitComment(event) {
+    event.preventDefault();
+    if (!session.loggedIn()) { App.goLogin(); return; }
+    const input = document.querySelector('#commentInput');
+    const content = input.value.trim();
+    if (!content) { input.focus(); return; }
+    const button = event.target.querySelector('button[type="submit"]');
+    button.classList.add('is-loading');
+    try {
+      const path = replyTarget ? `/api/v1/comments/${encodeURIComponent(replyTarget.id)}/replies` : `/api/v1/posts/${encodeURIComponent(postId)}/comments`;
+      await api(path, { method: 'POST', body: { content } });
+      input.value = ''; input.dispatchEvent(new Event('input'));
+      const wasReply = Boolean(replyTarget);
+      setReply(null);
+      post.counts = { ...(post.counts || {}), comments: Number(post.counts?.comments || 0) + 1 };
+      renderActions();
+      if (!wasReply) commentSort = 'latest';
+      await loadComments(true);
+      toast(wasReply ? '回复已发布' : '评论已发布', 'success');
+    } catch (error) {
+      if (error.status === 401) { App.goLogin(); return; }
+      toast(error.message, 'error');
+    } finally { button.classList.remove('is-loading'); }
+  }
+
+  /* ---------------- actions ---------------- */
+  async function toggle(action) {
+    if (!session.loggedIn()) { toast('登录后才能操作'); setTimeout(() => App.goLogin(), 500); return; }
+    if (busy.has(action)) return;
+    busy.add(action);
+    const key = { like: 'liked', favorite: 'favorited', anchor: 'anchored' }[action];
+    const countKey = { like: 'likes', favorite: 'favorites', anchor: 'anchors' }[action];
+    const active = Boolean(post.viewer?.[key]);
+    // Optimistic update, rolled back if the request fails.
+    post.viewer = { ...(post.viewer || {}), [key]: !active };
+    post.counts = { ...(post.counts || {}), [countKey]: Math.max(0, Number(post.counts?.[countKey] || 0) + (active ? -1 : 1)) };
+    renderActions();
+    try {
+      const result = await api(`/api/v1/posts/${encodeURIComponent(postId)}/${action}`, { method: active ? 'DELETE' : 'POST' });
+      post.counts = result.counts || post.counts;
+      renderActions();
+      if (!active) toast({ like: '已点赞', favorite: '已收藏，可在「我的 › 收藏」找到', anchor: '已投锚' }[action], 'success');
+    } catch (error) {
+      post.viewer = { ...(post.viewer || {}), [key]: active };
+      post.counts = { ...(post.counts || {}), [countKey]: Math.max(0, Number(post.counts?.[countKey] || 0) + (active ? 1 : -1)) };
+      renderActions();
+      toast(error.message, 'error');
+    } finally { busy.delete(action); }
+  }
+
+  async function buy() {
+    if (!session.loggedIn()) { App.goLogin(); return; }
+    const access = accessInfo(post, unitName);
+    let balance = null;
+    try { balance = Number((await api('/api/v1/me/points')).balance || 0); } catch {}
+    if (balance !== null && balance < access.price) {
+      const go = await App.modal({ title: `${unitName}不足`, body: `<p>解锁需要 <strong class="num">${num(access.price)}</strong> ${escapeHtml(unitName)}，当前余额 <strong class="num">${num(balance)}</strong> ${escapeHtml(unitName)}。</p><p class="hint" style="margin-top:8px">可以使用兑换码充值，或签到领取${escapeHtml(unitName)}。</p>`, actions: [{ label: '稍后再说', value: false }, { label: `获取${unitName}`, primary: true, value: true }] });
+      if (go) location.href = 'membership.html#redeem';
+      return;
+    }
+    const ok = await App.confirm({ title: '确认解锁', message: `将使用 ${num(access.price)} ${unitName}解锁《${post.title}》${balance !== null ? `，解锁后余额 ${num(balance - access.price)} ${unitName}` : ''}。`, confirmText: '确认解锁' });
+    if (!ok) return;
+    try {
+      await api(`/api/v1/posts/${encodeURIComponent(postId)}/purchase`, { method: 'POST', body: { idempotencyKey: `buy_${postId}_${Date.now()}` } });
+      sessionStorage.removeItem('iyesh:me');
+      toast('解锁成功', 'success');
+      await load();
+    } catch (error) { toast(error.message, 'error'); }
+  }
+
+  async function tip() {
+    if (!session.loggedIn()) { App.goLogin(); return; }
+    let balance = 0;
+    try { balance = Number((await api('/api/v1/me/points')).balance || 0); } catch {}
+    const body = document.createElement('div');
+    body.innerHTML = `<p class="hint">当前余额 <strong class="num" style="color:var(--ink)">${num(balance)}</strong> ${escapeHtml(unitName)}</p>
+      <div class="chip-row" style="margin-top:14px">${[10, 50, 100, 200].map(value => `<button class="chip num" type="button" data-amount="${value}" aria-pressed="${value === 10}">${value}</button>`).join('')}</div>
+      <div class="field" style="margin-top:14px"><label class="label" for="tipAmount">打赏数量</label><input class="input num" id="tipAmount" type="number" inputmode="numeric" min="1" step="1" value="10"></div>
+      <div class="field" style="margin-top:12px"><label class="label" for="tipMessage">留言 <small>选填</small></label><input class="input" id="tipMessage" maxlength="100" placeholder="写一句感谢"></div>
+      <p class="field-error" id="tipError" hidden></p>`;
+    body.addEventListener('click', event => {
+      const chip = event.target.closest('[data-amount]');
+      if (!chip) return;
+      body.querySelectorAll('[data-amount]').forEach(item => item.setAttribute('aria-pressed', String(item === chip)));
+      body.querySelector('#tipAmount').value = chip.dataset.amount;
+    });
+    await App.modal({ title: '打赏作者', body, actions: [{ label: '取消', value: null }, { label: '确认打赏', className: 'btn--money', onClick: async () => {
+      const amount = Number(body.querySelector('#tipAmount').value);
+      const error = body.querySelector('#tipError');
+      if (!Number.isInteger(amount) || amount < 1) { error.textContent = `请输入正确的${unitName}数量`; error.hidden = false; return false; }
+      if (amount > balance) { error.innerHTML = `${escapeHtml(unitName)}余额不足，<a class="text-btn" href="membership.html#redeem">去充值</a>`; error.hidden = false; return false; }
+      try {
+        await api('/api/v1/tips', { method: 'POST', body: { postId, points: amount, message: body.querySelector('#tipMessage').value.trim() } });
+        sessionStorage.removeItem('iyesh:me');
+        post.counts = { ...(post.counts || {}), tips: Number(post.counts?.tips || 0) + 1 };
+        toast(`已打赏 ${amount} ${unitName}，谢谢你的支持`, 'success');
+      } catch (requestError) { error.textContent = requestError.message; error.hidden = false; return false; }
+    } }] });
+  }
+
+  async function report() {
+    if (!session.loggedIn()) { App.goLogin(); return; }
+    const reason = await App.prompt({ title: '举报内容', label: '举报原因', presets: ['广告引流', '抄袭侵权', '内容虚假', '违法违规'], placeholder: '请选择或填写原因', maxLength: 200, confirmText: '提交举报' });
+    if (!reason) return;
+    try { await api(`/api/v1/posts/${encodeURIComponent(postId)}/report`, { method: 'POST', body: { reason: 'other', detail: reason } }); toast('举报已提交，我们会尽快处理', 'success'); }
+    catch (error) { toast(error.message, 'error'); }
+  }
+
+  function share() {
+    const access = accessInfo(post, unitName);
+    window.Share.open({ id: post.id, title: post.title, excerpt: post.excerpt, author: authorOf(post), cover: post.thumbnail || post.coverImage, topics: topicsOf(post), access: { type: access.type, price: access.price, unit: access.unit }, dateText: dateText(post.publishedAt) });
+  }
+
+  async function handleAction(action) {
+    if (action === 'like' || action === 'favorite' || action === 'anchor') return toggle(action);
+    if (action === 'share') return share();
+    if (action === 'buy') return buy();
+    if (action === 'tip') return tip();
+    if (action === 'report') return report();
+    if (action === 'comment') {
+      const input = document.querySelector('#commentInput');
+      if (!input) { document.querySelector('#comments')?.scrollIntoView({ behavior: 'smooth' }); return; }
+      if (!session.loggedIn()) { App.goLogin(); return; }
+      input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setTimeout(() => input.focus(), 250);
+    }
+  }
+
+  document.addEventListener('click', async event => {
+    const back = event.target.closest('#backLink');
+    if (back && backLink()) { event.preventDefault(); history.back(); return; }
+    const actionButton = event.target.closest('[data-action]');
+    if (actionButton) { handleAction(actionButton.dataset.action); return; }
+    const sort = event.target.closest('[data-sort]');
+    if (sort && sort.dataset.sort !== commentSort) { commentSort = sort.dataset.sort; loadComments(true); return; }
+    if (event.target.closest('#moreComments')) { loadComments(false); return; }
+    if (event.target.closest('#cancelReply')) { setReply(null); return; }
+    const reply = event.target.closest('[data-reply]');
+    if (reply) { if (!session.loggedIn()) { App.goLogin(); return; } setReply({ id: reply.dataset.reply, name: reply.dataset.name }); return; }
+    const del = event.target.closest('[data-delete-comment]');
+    if (del) {
+      if (!(await App.confirm({ title: '删除评论', message: '删除后，这条评论下的回复也会一起隐藏。', confirmText: '删除', danger: true }))) return;
+      try { await api(`/api/v1/comments/${encodeURIComponent(del.dataset.deleteComment)}`, { method: 'DELETE' }); toast('评论已删除', 'success'); await loadComments(true); } catch (error) { toast(error.message, 'error'); }
+      return;
+    }
+    const rep = event.target.closest('[data-report-comment]');
+    if (rep) {
+      if (!session.loggedIn()) { App.goLogin(); return; }
+      const reason = await App.prompt({ title: '举报评论', label: '举报原因', presets: ['广告引流', '辱骂攻击', '虚假信息', '违法违规'], maxLength: 200, confirmText: '提交举报' });
+      if (!reason) return;
+      try { await api(`/api/v1/comments/${encodeURIComponent(rep.dataset.reportComment)}/report`, { method: 'POST', body: { reason: 'other', detail: reason } }); rep.textContent = '已举报'; rep.disabled = true; toast('举报已提交', 'success'); } catch (error) { toast(error.message, 'error'); }
+    }
+  });
+  document.addEventListener('submit', event => { if (event.target.id === 'composer') submitComment(event); });
+
+  function renderMissing(message, retry = false) {
+    article.setAttribute('aria-busy', 'false');
+    article.innerHTML = `<a class="back-link" href="index.html">${icon('back')}回到发现</a><div class="sheet empty" style="padding:56px 20px">${icon(retry ? 'alert' : 'file')}<strong>${escapeHtml(message)}</strong><p>${retry ? '可能是网络不稳定，稍后再试一次。' : '它可能已被作者下线，或链接有误。'}</p>${retry ? '<button class="btn btn--sm" type="button" id="retryLoad">重新加载</button>' : '<a class="btn btn--primary btn--sm" href="index.html">看看其他内容</a>'}</div>`;
+    article.querySelector('#retryLoad')?.addEventListener('click', load);
+    bar.hidden = true; rail.innerHTML = ''; aside.innerHTML = '';
+  }
+
+  async function load() {
+    if (!postId) { renderMissing('没有找到这篇内容'); return; }
+    try { const config = await api('/api/v1/points/config', { auth: false }); unitName = config.unitName || unitName; } catch {}
+    try {
+      post = await api(`/api/v1/posts/${encodeURIComponent(postId)}`);
+    } catch (error) {
+      if (error.status === 404) renderMissing('这篇内容不存在或已下线'); else renderMissing('内容加载失败', true);
+      return;
+    }
+    setMeta();
+    renderArticle();
+    renderActions();
+    renderAside([]);
+    commentSort = 'latest';
+    loadComments(true);
+    loadRelated();
+  }
+  load();
+})();
