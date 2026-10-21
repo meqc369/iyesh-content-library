@@ -21,9 +21,9 @@ const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024
 const NOTIFICATION_RETENTION_DAYS = Math.max(1, Math.min(3650, Number(process.env.NOTIFICATION_RETENTION_DAYS || 180) || 180))
 const NOTIFICATION_CLEANUP_INTERVAL_MS = Math.max(60 * 60 * 1000, Number(process.env.NOTIFICATION_CLEANUP_INTERVAL_MS || 6 * 60 * 60 * 1000) || 6 * 60 * 60 * 1000)
 const TRACK_DISCOVERY_SOURCE_URL = String(process.env.TRACK_DISCOVERY_SOURCE_URL || 'https://yt.pienv.com').replace(/\/+$/, '')
-const TRACK_DISCOVERY_SYNC_INTERVAL_MS = Math.max(60 * 60 * 1000, Number(process.env.TRACK_DISCOVERY_SYNC_INTERVAL_MS || 8 * 60 * 60 * 1000) || 8 * 60 * 60 * 1000)
-const TRACK_DISCOVERY_MAX_ITEMS = 24
-const TRACK_DISCOVERY_MAX_SECTORS = 12
+const TRACK_DISCOVERY_SYNC_INTERVAL_MS = Math.max(60 * 60 * 1000, Number(process.env.TRACK_DISCOVERY_SYNC_INTERVAL_MS || 4 * 60 * 60 * 1000) || 4 * 60 * 60 * 1000)
+const TRACK_DISCOVERY_MAX_ITEMS = 60
+const TRACK_DISCOVERY_MAX_SECTORS = 16
 const UPLOAD_PUBLIC_BASE_URL = String(process.env.UPLOAD_PUBLIC_BASE_URL || '').replace(/\/+$/, '')
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 // Share links are consumed by the H5 share sheet and by social previews. Keep
@@ -1397,15 +1397,23 @@ async function syncTrackDiscovery({ force = false } = {}) {
         sourceRun = values.find(item => ['completed', 'partial'].includes(String(item?.status || '').toLowerCase())) || null
       } catch {}
       if (!sourceRun) throw new Error('source_successful_run_missing')
-      const today = Array.isArray(dashboard.today) ? dashboard.today : []
       const accelerating = Array.isArray(dashboard.accelerating) ? dashboard.accelerating : []
-      const candidates = [...accelerating, ...today.filter(item => ['accelerating', 'growing', 'single_breakout'].includes(item?.growth_status))]
+      const channels = Array.isArray(dashboard.channels) ? dashboard.channels : []
+      const today = Array.isArray(dashboard.today) ? dashboard.today : []
+      const candidates = [...accelerating, ...channels, ...today]
+      const growthRank = { accelerating: 3, growing: 2, single_breakout: 1 }
       const seen = new Set()
       const items = candidates.map(discoveryItemFromSource).filter(item => {
         const key = item.youtubeId || item.candidateId
-        if (!key || seen.has(key) || (!item.title && !item.video?.title)) return false
+        if (!key || seen.has(key) || !growthRank[item.growthStatus] || (!item.title && !item.video?.title)) return false
         seen.add(key); return true
-      }).sort((a, b) => Number(b.observedGrowth?.viewsPerHour || 0) - Number(a.observedGrowth?.viewsPerHour || 0)).slice(0, TRACK_DISCOVERY_MAX_ITEMS)
+      }).sort((a, b) => {
+        const rankDiff = (growthRank[b.growthStatus] || 0) - (growthRank[a.growthStatus] || 0)
+        if (rankDiff) return rankDiff
+        const speedDiff = Number(b.observedGrowth?.viewsPerHour || 0) - Number(a.observedGrowth?.viewsPerHour || 0)
+        if (speedDiff) return speedDiff
+        return Number(b.video?.viewCount || 0) - Number(a.video?.viewCount || 0)
+      }).slice(0, TRACK_DISCOVERY_MAX_ITEMS)
       const sectors = (Array.isArray(dashboard.sectors) ? dashboard.sectors : []).filter(item => item?.status === 'potential' || Number(item?.growing_channel_count || 0) > 0).sort((a, b) => Number(b.growing_channel_count || 0) - Number(a.growing_channel_count || 0)).slice(0, TRACK_DISCOVERY_MAX_SECTORS).map(item => ({
         name: item.name, status: item.status, channelCount: item.channel_count, growingChannelCount: item.growing_channel_count, examples: item.examples
       }))
