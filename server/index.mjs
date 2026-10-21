@@ -20,6 +20,10 @@ const MAX_IMAGE_PIXELS = Math.max(4_000_000, Math.min(40_000_000, Number(process
 const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024
 const NOTIFICATION_RETENTION_DAYS = Math.max(1, Math.min(3650, Number(process.env.NOTIFICATION_RETENTION_DAYS || 180) || 180))
 const NOTIFICATION_CLEANUP_INTERVAL_MS = Math.max(60 * 60 * 1000, Number(process.env.NOTIFICATION_CLEANUP_INTERVAL_MS || 6 * 60 * 60 * 1000) || 6 * 60 * 60 * 1000)
+const TRACK_DISCOVERY_SOURCE_URL = String(process.env.TRACK_DISCOVERY_SOURCE_URL || 'https://yt.pienv.com').replace(/\/+$/, '')
+const TRACK_DISCOVERY_SYNC_INTERVAL_MS = Math.max(60 * 60 * 1000, Number(process.env.TRACK_DISCOVERY_SYNC_INTERVAL_MS || 8 * 60 * 60 * 1000) || 8 * 60 * 60 * 1000)
+const TRACK_DISCOVERY_MAX_ITEMS = 24
+const TRACK_DISCOVERY_MAX_SECTORS = 12
 const UPLOAD_PUBLIC_BASE_URL = String(process.env.UPLOAD_PUBLIC_BASE_URL || '').replace(/\/+$/, '')
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 // Share links are consumed by the H5 share sheet and by social previews. Keep
@@ -107,7 +111,8 @@ const DEFAULT_STORE = {
   smtpConfig: SMTP_ENV_CONFIG,
   cdkeys: [],
   cdkeyRedemptions: [],
-  auditLogs: []
+  auditLogs: [],
+  trackDiscovery: { status: 'pending', syncedAt: null, sourceGeneratedAt: null, sourceRun: null, summary: {}, sectors: [], items: [], lastError: null }
 }
 let savedFilters = new Map()
 let profiles = new Map()
@@ -143,7 +148,65 @@ const userLoginBuckets = new Map()
 let cdkeys = []
 let cdkeyRedemptions = []
 let auditLogs = []
+let trackDiscovery = { status: 'pending', syncedAt: null, sourceGeneratedAt: null, sourceRun: null, summary: {}, sectors: [], items: [], lastError: null }
 let persistQueue = Promise.resolve()
+
+function normalizeTrackDiscovery(value = {}) {
+  const input = value && typeof value === 'object' ? value : {}
+  const summary = input.summary && typeof input.summary === 'object' ? input.summary : {}
+  const sectors = Array.isArray(input.sectors) ? input.sectors.slice(0, TRACK_DISCOVERY_MAX_SECTORS).map(item => ({
+    name: String(item?.name || '其他赛道').slice(0, 80),
+    status: String(item?.status || 'potential').slice(0, 30),
+    channelCount: Number(item?.channelCount || item?.channel_count || 0) || 0,
+    growingChannelCount: Number(item?.growingChannelCount || item?.growing_channel_count || 0) || 0,
+    examples: Array.isArray(item?.examples) ? item.examples.slice(0, 3).map(example => ({
+      title: String(example?.title || '').slice(0, 180),
+      youtubeId: String(example?.youtubeId || example?.youtube_id || '').slice(0, 80),
+      score: Number(example?.score || 0) || 0
+    })) : []
+  })) : []
+  const items = Array.isArray(input.items) ? input.items.slice(0, TRACK_DISCOVERY_MAX_ITEMS).map(item => ({
+    candidateId: String(item?.candidateId || item?.candidate_id || '').slice(0, 80),
+    youtubeId: String(item?.youtubeId || item?.youtube_id || '').slice(0, 80),
+    title: String(item?.title || '').slice(0, 180),
+    channelUrl: String(item?.channelUrl || item?.channel_url || '').slice(0, 500),
+    subscriberCount: item?.subscriberCount == null ? null : Number(item.subscriberCount) || 0,
+    ageDays: item?.ageDays == null ? null : Number(item.ageDays) || 0,
+    sectorName: String(item?.sectorName || item?.sector_name || '其他赛道').slice(0, 80),
+    growthStatus: String(item?.growthStatus || item?.growth_status || '').slice(0, 40),
+    growthLabel: String(item?.growthLabel || item?.growth_label || '').slice(0, 40),
+    observedGrowth: item?.observedGrowth && typeof item.observedGrowth === 'object' ? {
+      viewGain: item.observedGrowth.viewGain == null ? null : Number(item.observedGrowth.viewGain) || 0,
+      hours: item.observedGrowth.hours == null ? null : Number(item.observedGrowth.hours) || 0,
+      viewsPerHour: item.observedGrowth.viewsPerHour == null ? null : Number(item.observedGrowth.viewsPerHour) || 0
+    } : null,
+    firstDiscoveredAt: item?.firstDiscoveredAt || item?.first_discovered_at || null,
+    lastObservedAt: item?.lastObservedAt || item?.last_observed_at || null,
+    video: item?.video && typeof item.video === 'object' ? {
+      youtubeId: String(item.video.youtubeId || item.video.youtube_id || '').slice(0, 80),
+      title: String(item.video.title || '').slice(0, 220),
+      url: String(item.video.url || '').slice(0, 500),
+      thumbnailUrl: String(item.video.thumbnailUrl || item.video.thumbnail_url || '').slice(0, 500),
+      viewCount: item.video.viewCount == null ? null : Number(item.video.viewCount) || 0,
+      durationSeconds: item.video.durationSeconds == null ? null : Number(item.video.durationSeconds) || 0,
+      publishedAt: item.video.publishedAt || item.video.published_at || null
+    } : null
+  })).filter(item => item.title || item.video?.title) : []
+  return {
+    status: input.status === 'ready' ? 'ready' : 'pending',
+    syncedAt: input.syncedAt || null,
+    sourceGeneratedAt: input.sourceGeneratedAt || null,
+    sourceRun: input.sourceRun && typeof input.sourceRun === 'object' ? {
+      id: input.sourceRun.id == null ? null : Number(input.sourceRun.id) || null,
+      status: String(input.sourceRun.status || '').slice(0, 30),
+      finishedAt: input.sourceRun.finishedAt || input.sourceRun.finished_at || null
+    } : null,
+    summary: Object.fromEntries(Object.entries(summary).filter(([key]) => /^[A-Za-z0-9_]+$/.test(key)).slice(0, 40)),
+    sectors,
+    items,
+    lastError: null
+  }
+}
 
 async function loadStore() {
   let data = DEFAULT_STORE
@@ -206,6 +269,7 @@ async function loadStore() {
   cdkeys = Array.isArray(data.cdkeys) ? data.cdkeys.map(migrateCdkey) : []
   cdkeyRedemptions = Array.isArray(data.cdkeyRedemptions) ? data.cdkeyRedemptions : []
   auditLogs = Array.isArray(data.auditLogs) ? data.auditLogs : []
+  trackDiscovery = normalizeTrackDiscovery(data.trackDiscovery)
   posts = posts.map(post => ({ ...post, status: post.status || 'published', accessType: ['free', 'member', 'paid'].includes(post.accessType) ? post.accessType : 'free', pricePoints: normalizePoints(post.pricePoints ?? post.priceCents), priceCents: 0, memberPlanIds: Array.isArray(post.memberPlanIds) ? post.memberPlanIds : [], coverImage: normalizeUploadedUrl(post.coverImage), images: normalizeUploadedImages(post.images), counts: { anchors: 0, likes: 0, comments: 0, favorites: 0, tips: 0, ...(post.counts || {}) } }))
   if (seededAdmin || seededReferralCodes) await persistStore()
 }
@@ -215,7 +279,7 @@ async function persistStore() {
     await mkdir(dirname(DATA_FILE), { recursive: true })
     const temporary = `${DATA_FILE}.tmp-${process.pid}-${Date.now()}-${randomBytes(8).toString('hex')}`
     try {
-      await writeFile(temporary, JSON.stringify({ posts, tags, savedFilters: Object.fromEntries(savedFilters), profiles: Object.fromEntries(profiles), notifications: Object.fromEntries(notifications), reports, commentReports, comments: Object.fromEntries(comments), interactions: Object.fromEntries(interactions), memberGroups, plans, memberships: Object.fromEntries(memberships), entitlements, orders, tips, paymentEvents, pointsAccounts: Object.fromEntries(pointsAccounts), pointsLedger, pointsConfig, referralConfig, referralRelations: Object.fromEntries(referralRelations), referralCommissions, checkinConfig, checkins: Object.fromEntries(checkins), withdrawals, accounts: Object.fromEntries(accounts), admins: Object.fromEntries(admins), emailVerifications, smtpConfig, cdkeys: cdkeys.map(({ code, ...item }) => item), cdkeyRedemptions, auditLogs }, null, 2))
+      await writeFile(temporary, JSON.stringify({ posts, tags, savedFilters: Object.fromEntries(savedFilters), profiles: Object.fromEntries(profiles), notifications: Object.fromEntries(notifications), reports, commentReports, comments: Object.fromEntries(comments), interactions: Object.fromEntries(interactions), memberGroups, plans, memberships: Object.fromEntries(memberships), entitlements, orders, tips, paymentEvents, pointsAccounts: Object.fromEntries(pointsAccounts), pointsLedger, pointsConfig, referralConfig, referralRelations: Object.fromEntries(referralRelations), referralCommissions, checkinConfig, checkins: Object.fromEntries(checkins), withdrawals, accounts: Object.fromEntries(accounts), admins: Object.fromEntries(admins), emailVerifications, smtpConfig, cdkeys: cdkeys.map(({ code, ...item }) => item), cdkeyRedemptions, auditLogs, trackDiscovery }, null, 2))
       await rename(temporary, DATA_FILE)
     } finally {
       await unlink(temporary).catch(() => {})
@@ -1269,6 +1333,102 @@ function startNotificationCleanup() {
   timer.unref?.()
   return timer
 }
+let trackDiscoverySyncPromise = null
+function sourceCookie(setCookie) {
+  const raw = String(setCookie || '').split(',').find(value => /(?:^|;)\s*yt_session=/i.test(value)) || String(setCookie || '')
+  return raw.split(';')[0].trim()
+}
+async function sourceJson(path, cookie, options = {}) {
+  const response = await fetch(`${TRACK_DISCOVERY_SOURCE_URL}${path}`, {
+    ...options,
+    headers: { accept: 'application/json', ...(cookie ? { cookie } : {}), ...(options.headers || {}) },
+    signal: AbortSignal.timeout(15000)
+  })
+  if (!response.ok) throw new Error(`source_${response.status}`)
+  return response.json()
+}
+function discoveryItemFromSource(item) {
+  const growth = item?.video?.observed_growth || item?.video?.growth?.h24 || item?.observed_growth || {}
+  return {
+    candidateId: item?.candidate_id || item?.candidateId || item?.channel_id || item?.youtube_id,
+    youtubeId: item?.youtube_id,
+    title: item?.title,
+    channelUrl: item?.channel_url,
+    subscriberCount: item?.subscriber_count,
+    ageDays: item?.age_days,
+    sectorName: item?.sector_name,
+    growthStatus: item?.growth_status,
+    growthLabel: item?.growth_label,
+    observedGrowth: { viewGain: growth.view_gain ?? growth.gain, hours: growth.hours, viewsPerHour: growth.views_per_hour },
+    firstDiscoveredAt: item?.first_discovered_at,
+    lastObservedAt: item?.last_observed_at,
+    video: item?.video ? {
+      youtubeId: item.video.youtube_id,
+      title: item.video.title,
+      url: item.video.url,
+      thumbnailUrl: item.video.thumbnail_url,
+      viewCount: item.video.view_count,
+      durationSeconds: item.video.duration_seconds,
+      publishedAt: item.video.published_at
+    } : null
+  }
+}
+async function syncTrackDiscovery({ force = false } = {}) {
+  const username = String(process.env.TRACK_DISCOVERY_SOURCE_USERNAME || '').trim()
+  const password = String(process.env.TRACK_DISCOVERY_SOURCE_PASSWORD || '')
+  const lastSyncAt = trackDiscovery.syncedAt ? new Date(trackDiscovery.syncedAt).getTime() : 0
+  if (!username || !password) return false
+  if (!force && lastSyncAt && Date.now() - lastSyncAt < TRACK_DISCOVERY_SYNC_INTERVAL_MS) return false
+  if (trackDiscoverySyncPromise) return trackDiscoverySyncPromise
+  trackDiscoverySyncPromise = (async () => {
+    try {
+      const login = await fetch(`${TRACK_DISCOVERY_SOURCE_URL}/api/auth/login`, {
+        method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ username, password }), signal: AbortSignal.timeout(15000)
+      })
+      if (!login.ok) throw new Error(`source_login_${login.status}`)
+      const cookie = sourceCookie(login.headers.get('set-cookie'))
+      if (!cookie) throw new Error('source_session_missing')
+      const dashboard = await sourceJson('/api/research/dashboard?days=30', cookie)
+      let sourceRun = null
+      try {
+        const runs = await sourceJson('/api/exploration/runs?limit=5', cookie)
+        const values = Array.isArray(runs) ? runs : (runs.items || runs.runs || [])
+        sourceRun = values.find(item => ['completed', 'partial'].includes(String(item?.status || '').toLowerCase())) || null
+      } catch {}
+      if (!sourceRun) throw new Error('source_successful_run_missing')
+      const today = Array.isArray(dashboard.today) ? dashboard.today : []
+      const accelerating = Array.isArray(dashboard.accelerating) ? dashboard.accelerating : []
+      const candidates = [...accelerating, ...today.filter(item => ['accelerating', 'growing', 'single_breakout'].includes(item?.growth_status))]
+      const seen = new Set()
+      const items = candidates.map(discoveryItemFromSource).filter(item => {
+        const key = item.youtubeId || item.candidateId
+        if (!key || seen.has(key) || (!item.title && !item.video?.title)) return false
+        seen.add(key); return true
+      }).sort((a, b) => Number(b.observedGrowth?.viewsPerHour || 0) - Number(a.observedGrowth?.viewsPerHour || 0)).slice(0, TRACK_DISCOVERY_MAX_ITEMS)
+      const sectors = (Array.isArray(dashboard.sectors) ? dashboard.sectors : []).filter(item => item?.status === 'potential' || Number(item?.growing_channel_count || 0) > 0).sort((a, b) => Number(b.growing_channel_count || 0) - Number(a.growing_channel_count || 0)).slice(0, TRACK_DISCOVERY_MAX_SECTORS).map(item => ({
+        name: item.name, status: item.status, channelCount: item.channel_count, growingChannelCount: item.growing_channel_count, examples: item.examples
+      }))
+      const next = normalizeTrackDiscovery({ status: 'ready', syncedAt: nowIso(), sourceGeneratedAt: dashboard.generated_at, sourceRun: sourceRun && { id: sourceRun.id, status: sourceRun.status, finishedAt: sourceRun.finished_at }, summary: dashboard.summary || {}, sectors, items })
+      trackDiscovery = next
+      await persistStore()
+      console.log(`[track-discovery] synced ${items.length} results from source`)
+      return true
+    } catch (error) {
+      console.error(`[track-discovery] sync failed: ${error instanceof Error ? error.message : String(error)}`)
+      return false
+    } finally {
+      trackDiscoverySyncPromise = null
+    }
+  })()
+  return trackDiscoverySyncPromise
+}
+function startTrackDiscoverySync() {
+  syncTrackDiscovery({ force: true }).catch(() => {})
+  const timer = setInterval(() => { syncTrackDiscovery().catch(() => {}) }, TRACK_DISCOVERY_SYNC_INTERVAL_MS)
+  timer.unref?.()
+  return timer
+}
 function findOrder(orderId) { return orders.find(order => order.id === orderId || order.orderNo === orderId) }
 function ownsOrder(order, user) { return Boolean(order && user && (order.userId === user.id || isAdmin({ headers: { 'x-admin-key': '' } }))) }
 function grantOrderBenefits(order) {
@@ -1582,6 +1742,12 @@ const server = http.createServer(async (req, res) => {
     }
     const user = currentUser(req)
     if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, service: 'content-library-api' })
+    if (req.method === 'GET' && url.pathname === '/api/v1/track-discovery') {
+      const lastSyncAt = trackDiscovery.syncedAt ? new Date(trackDiscovery.syncedAt).getTime() : 0
+      const stale = !lastSyncAt || Date.now() - lastSyncAt >= TRACK_DISCOVERY_SYNC_INTERVAL_MS
+      if (stale) syncTrackDiscovery().catch(() => {})
+      return json(res, 200, { ...trackDiscovery, syncIntervalHours: Math.round(TRACK_DISCOVERY_SYNC_INTERVAL_MS / 3600000), nextSyncAt: lastSyncAt ? new Date(lastSyncAt + TRACK_DISCOVERY_SYNC_INTERVAL_MS).toISOString() : null, stale })
+    }
     const uploadAssetMatch = url.pathname.match(/^\/uploads\/([A-Za-z0-9][A-Za-z0-9._-]*)$/)
     if (req.method === 'GET' && uploadAssetMatch) {
       try {
@@ -2901,4 +3067,5 @@ const host = String(process.env.HOST || '127.0.0.1')
 await loadStore()
 await runNotificationCleanup()
 startNotificationCleanup()
+startTrackDiscoverySync()
 server.listen(port, host, () => console.log(`content-library-api listening on http://${host}:${port}`))

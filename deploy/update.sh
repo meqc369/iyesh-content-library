@@ -137,7 +137,7 @@ fi
 mkdir -p "${WORK}/src"
 tar -xzf "${WORK}/src.tgz" -C "${WORK}/src" --strip-components=1
 SRC="${WORK}/src"
-for f in index.html detail.html publish.html profile.html membership.html login.html admin.html admin-login.html core.js styles.css admin.css server/index.mjs; do
+for f in index.html detail.html publish.html profile.html membership.html exploration.html login.html admin.html admin-login.html core.js exploration.js styles.css admin.css server/index.mjs; do
   [ -f "${SRC}/${f}" ] || die "下载的代码缺少 ${f}，已停止"
 done
 node --check "${SRC}/server/index.mjs" || die "server/index.mjs 语法检查未通过，已停止"

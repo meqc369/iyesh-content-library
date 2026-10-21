@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#13213b">
+  <meta name="format-detection" content="telephone=no">
+  <title>赛道挖掘 · 月入万刀</title>
+  <meta name="description" content="从公开数据中发现正在加速的 YouTube 内容赛道和频道。">
+  <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
+  <link rel="preload" href="assets/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css?v=20261021r1">
+</head>
+<body data-page="exploration">
+  <a class="sr-only" href="#explorationContent">跳到赛道挖掘内容</a>
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="brand" href="index.html" aria-label="月入万刀首页"><img src="assets/iyesh-logo.webp" alt="" width="32" height="32"><span>月入万刀</span></a>
+      <nav class="site-nav" aria-label="主导航"><a href="index.html" data-nav="discover">发现</a><a href="exploration.html" data-nav="exploration">赛道挖掘</a><a href="membership.html" data-nav="membership">会员中心</a><a href="profile.html" data-nav="profile">个人中心</a></nav>
+      <div class="site-actions">
+        <a class="btn btn--primary btn--sm hide-mobile" href="publish.html" data-icon="plus">发布内容</a>
+        <a class="icon-btn hide-mobile" href="profile.html#messages" aria-label="消息" data-icon="bell"><span class="dot-badge" data-unread hidden></span></a>
+        <a class="account-link" href="login.html" data-account>登录</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-main" id="explorationContent">
+    <section class="band explore-hero">
+      <div class="container">
+        <div class="explore-hero__eyebrow"><span class="signal-dot" aria-hidden="true"></span><span>公开数据研究台</span><span class="explore-hero__rule" aria-hidden="true"></span><span id="syncLabel">正在读取最新成果</span></div>
+        <h1>赛道挖掘</h1>
+        <p>把正在发生的增长信号整理成可观察的方向，先看赛道，再决定要不要投入时间。</p>
+        <div class="explore-hero__meta"><span>只展示已完成研究中的成功信号</span><span aria-hidden="true">·</span><span>每 8 小时同步一次</span></div>
+      </div>
+    </section>
+
+    <div class="container explore-shell">
+      <div class="explore-summary" id="summary" aria-label="研究概览"></div>
+      <div class="explore-layout">
+        <section class="sheet explore-panel" aria-labelledby="sectorTitle">
+          <div class="panel-head"><div><p class="explore-kicker">方向信号</p><h2 id="sectorTitle">正在变热的赛道</h2></div><span class="hint" id="sectorUpdated"></span></div>
+          <div class="explore-sector-grid" id="sectors" aria-live="polite"></div>
+        </section>
+        <aside class="explore-aside">
+          <section class="note note--seal explore-note">
+            <p class="explore-kicker">怎么读</p>
+            <h2>先找重复出现的信号</h2>
+            <p>同一方向里出现多个新频道，且视频在持续获得播放，才值得进一步验证。</p>
+            <span class="explore-note__stamp">公开数据 · 研究辅助</span>
+          </section>
+          <section class="sheet explore-source">
+            <div class="panel-head"><h2>数据说明</h2><span class="tag tag--info">YouTube</span></div>
+            <p>数据来自公开频道与视频指标。评分、增长速度和“成功”标签是研究系统的筛选信号，不代表官方 YPP、收入或结果承诺。</p>
+            <a class="text-btn" href="https://www.youtube.com" target="_blank" rel="noopener">查看 YouTube <span aria-hidden="true">↗</span></a>
+          </section>
+        </aside>
+      </div>
+
+      <section class="sheet explore-panel explore-results" aria-labelledby="resultTitle">
+        <div class="panel-head"><div><p class="explore-kicker">频道样本</p><h2 id="resultTitle">值得继续观察</h2></div><span class="hint" id="resultUpdated"></span></div>
+        <div class="explore-result-grid" id="results" aria-live="polite"></div>
+      </section>
+      <div class="explore-footnote" id="footnote"></div>
+    </div>
+  </main>
+
+  <footer class="site-footer"><div class="container"><span>© 月入万刀 · 实战内容与会员权益平台</span><span><a href="membership.html">会员中心</a>　<a href="publish.html">投稿</a></span></div></footer>
+
+  <nav class="tabbar" aria-label="快捷导航">
+    <a href="index.html" data-nav="discover" data-icon="discover"><span>发现</span></a>
+    <a href="exploration.html" data-nav="exploration" data-icon="sparkle"><span>赛道</span></a>
+    <a href="membership.html" data-nav="membership" data-icon="member"><span>会员</span></a>
+    <a href="publish.html" class="tab-publish" aria-label="发布内容"><span class="plus" data-icon="plus"></span><small>发布</small></a>
+    <a href="profile.html#messages" data-nav="messages" data-icon="bell"><span>消息</span><span class="dot-badge" data-unread hidden></span></a>
+    <a href="profile.html" data-nav="profile" data-icon="user"><span>我的</span></a>
+  </nav>
+
+  <script src="api-config.js?v=20261021r1"></script>
+  <script src="core.js?v=20261021r1"></script>
+  <script src="exploration.js?v=20261021r1"></script>
+</body>
+</html>
