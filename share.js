@@ -14,9 +14,11 @@
   function postUrl(id) { return new URL(`detail.html?id=${encodeURIComponent(String(id || ''))}`, webBase()).href; }
   // Social crawlers read Open Graph tags from the server-rendered /share/ page.
   function shareLinkFor(id) {
-    const origin = window.CONTENT_API_BASE && /^https?:/i.test(window.CONTENT_API_BASE) ? new URL(window.CONTENT_API_BASE).origin : location.origin;
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-    return local ? postUrl(id) : `${origin}/share/${encodeURIComponent(String(id || ''))}`;
+    // The public share page must stay on the page's own origin. Using the API
+    // origin here can turn a rich preview into a plain cross-domain URL when
+    // the API is hosted separately.
+    return local ? postUrl(id) : `${location.origin}/share/${encodeURIComponent(String(id || ''))}`;
   }
 
   /* ---------------- QR ---------------- */

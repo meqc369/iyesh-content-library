@@ -395,7 +395,7 @@
     document.querySelector('.publish-top .actions').hidden = true;
     document.querySelector('#pageTitle').textContent = '发布内容';
     setSaveState('saved', '已提交');
-    els.notices.innerHTML = `<section class="sheet publish-done"><span class="seal">${icon('check')}</span><h2>已提交审核</h2><p>《${escapeHtml(title)}》正在审核，通过后会出现在发现页，结果会通过站内信通知你。</p><div class="actions"><a class="btn btn--primary" href="profile.html#posts">查看我的投稿</a><a class="btn" href="publish.html">再写一篇</a></div></section>`;
+    els.notices.innerHTML = `<section class="sheet publish-done"><span class="seal">${icon('check')}</span><h2>已提交审核</h2><p>《${escapeHtml(title)}》正在审核，通过后会出现在发现页，结果会通过站内信通知你。</p><div class="actions"><a class="btn btn--primary" href="profile.html?tab=posts">查看我的投稿</a><a class="btn" href="publish.html">再写一篇</a></div></section>`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   function preview() {
@@ -511,7 +511,7 @@
     if (state.dirty && !(await App.confirm({ title: '离开编辑', message: '内容已暂存在本机，下次打开发布页可以恢复。确定离开吗？', confirmText: '离开' }))) return;
     let sameOrigin = false;
     try { sameOrigin = document.referrer && new URL(document.referrer).origin === location.origin && !/login\.html/.test(document.referrer); } catch {}
-    if (sameOrigin && history.length > 1) history.back(); else location.href = postId ? 'profile.html#posts' : 'index.html';
+    if (sameOrigin && history.length > 1) history.back(); else location.href = postId ? 'profile.html?tab=posts' : 'index.html';
   });
   window.addEventListener('beforeunload', event => { if (uploading() || (state.dirty && state.saving)) { event.preventDefault(); event.returnValue = ''; } });
 
@@ -557,7 +557,7 @@
         server = await api(`/api/v1/me/posts/${encodeURIComponent(postId)}`);
         if (['published', 'archived'].includes(server.status)) {
           els.layout.hidden = true; els.bar.hidden = true; document.querySelector('.publish-top .actions').hidden = true;
-          notice(`${icon('alert')}<span>${server.status === 'published' ? '这篇内容已发布，发布后的修改请联系管理员。' : '这篇内容已下线，不能再编辑。'}</span><a class="btn btn--sm" href="${server.status === 'published' ? `detail.html?id=${encodeURIComponent(postId)}` : 'profile.html#posts'}">${server.status === 'published' ? '查看内容' : '返回投稿'}</a>`, 'info');
+          notice(`${icon('alert')}<span>${server.status === 'published' ? '这篇内容已发布，发布后的修改请联系管理员。' : '这篇内容已下线，不能再编辑。'}</span><a class="btn btn--sm" href="${server.status === 'published' ? `detail.html?id=${encodeURIComponent(postId)}` : 'profile.html?tab=posts'}">${server.status === 'published' ? '查看内容' : '返回投稿'}</a>`, 'info');
           return;
         }
         applySnapshot({ ...server, planIds: server.memberPlanIds, cover: server.coverImage, project: server.project === '未分类' ? '' : server.project, skill: server.skill === '未分类' ? '' : server.skill });

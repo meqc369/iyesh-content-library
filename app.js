@@ -309,7 +309,7 @@
       if (!post) return;
       const author = typeof post.author === 'string' ? { name: post.author } : post.author;
       const access = accessInfo(post, unitName);
-      window.Share.open({ id: post.id, title: post.title, excerpt: post.excerpt, author, cover: post.thumbnail || post.coverImage, topics: topicsOf(post), access: { type: access.type, price: access.price, unit: access.unit }, dateText: window.App.dateText(post.publishedAt) });
+      window.Share.open({ id: post.id, title: post.title, excerpt: post.excerpt, author, cover: post.thumbnail || post.coverImage || post.images?.[0], topics: topicsOf(post), access: { type: access.type, price: access.price, unit: access.unit }, dateText: window.App.dateText(post.publishedAt) });
     }
   });
   document.querySelector('#savedFilters').addEventListener('click', async event => {

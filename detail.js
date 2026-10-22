@@ -10,6 +10,7 @@
   const bar = document.querySelector('#actionBar');
   const aside = document.querySelector('#detailAside');
   let post = null;
+  let tipSummary = { items: [], total: 0, totalPoints: 0 };
   let unitName = '积分';
   let comments = [];
   let commentSort = 'latest';
@@ -29,8 +30,10 @@
     const title = post?.title || '内容详情';
     const description = post?.excerpt || '月入万刀实战内容';
     document.title = `${title} · 月入万刀`;
-    const image = post?.thumbnail ? App.mediaUrl(post.thumbnail) : new URL('assets/iyesh-logo.webp', location.href).href;
-    const values = { description, 'og:title': title, 'og:description': description, 'og:url': location.href, 'og:image': image };
+    const image = post?.thumbnail || post?.coverImage || post?.images?.[0]
+      ? App.mediaUrl(post.thumbnail || post.coverImage || post.images[0])
+      : new URL('assets/iyesh-logo.webp', location.href).href;
+    const values = { description, 'og:title': title, 'og:description': description, 'og:url': location.href, 'og:image': image, 'og:site_name': '月入万刀', 'twitter:card': 'summary_large_image', 'twitter:title': title, 'twitter:description': description, 'twitter:image': image };
     Object.entries(values).forEach(([key, value]) => {
       const attr = key.startsWith('og:') ? 'property' : 'name';
       let meta = document.head.querySelector(`meta[${attr}="${key}"]`);
@@ -77,6 +80,7 @@
       ${post.locked
         ? `${post.excerpt ? `<p class="article-excerpt">${escapeHtml(post.excerpt)}</p>` : ''}${paywallHtml()}`
         : `<div class="prose" id="prose">${post.content || `<p>${escapeHtml(post.excerpt || '')}</p>`}</div>`}
+      <div id="tipWall" aria-live="polite"></div>
       ${!post.locked && !post.viewer?.isAuthor ? `<section class="note tip-strip"><div class="copy"><strong>觉得有用？给作者一点${escapeHtml(unitName)}</strong><p>打赏会直接进入作者的${escapeHtml(unitName)}账户${post.counts?.tips ? `，已有 ${num(post.counts.tips)} 次打赏` : ''}。</p></div><button class="btn btn--money btn--sm" type="button" data-action="tip">${icon('coin')}打赏作者</button></section>` : ''}
       <p class="article-foot"><button class="text-btn is-muted" type="button" data-action="report">${icon('flag')}举报这篇内容</button></p>
       <section class="comments" id="comments" aria-label="评论">
@@ -106,6 +110,32 @@
       });
     }
     if (post.locked && post.accessType === 'paid') loadBalance();
+  }
+
+  function renderTipWall() {
+    const mount = article.querySelector('#tipWall');
+    if (!mount) return;
+    const items = (tipSummary.items || []).slice(0, 6);
+    if (!items.length) { mount.innerHTML = ''; return; }
+    const total = Number(tipSummary.totalPoints || items.reduce((sum, item) => sum + Number(item.points || 0), 0));
+    mount.innerHTML = `<section class="tip-wall" aria-label="收到的打赏">
+      <div class="tip-wall__head"><div><h2>${icon('gift')}收到的打赏</h2><p>感谢每一份支持，作者会继续更新实战内容。</p></div><strong class="tip-wall__total"><span class="num">${num(total)}</span><small>${escapeHtml(unitName)}</small></strong></div>
+      <div class="tip-wall__list">${items.map(item => {
+        const anonymous = Boolean(item.anonymous) || !item.userId;
+        const supporter = anonymous ? '匿名支持' : '社区用户';
+        const message = String(item.message || '').trim();
+        return `<article class="tip-card"><span class="tip-card__avatar" data-tone="${anonymous ? '4' : '2'}">${anonymous ? '匿' : '友'}</span><div class="tip-card__body"><strong>${supporter}</strong>${message ? `<p>${escapeHtml(message)}</p>` : '<p class="is-muted">送来了一份支持</p>'}<time>${escapeHtml(relativeTime(item.createdAt))}</time></div><span class="tip-card__amount">+${num(item.points)} ${escapeHtml(unitName)}</span></article>`;
+      }).join('')}</div>
+      ${Number(tipSummary.total || 0) > items.length ? `<p class="tip-wall__more">共 ${num(tipSummary.total)} 次支持</p>` : ''}
+    </section>`;
+  }
+
+  async function loadTips() {
+    try {
+      const body = await api(`/api/v1/tips?postId=${encodeURIComponent(postId)}&pageSize=6`, { auth: false });
+      tipSummary = { items: body.items || [], total: Number(body.total || 0), totalPoints: Number(body.totalPoints || 0) };
+      renderTipWall();
+    } catch { tipSummary = { items: [], total: 0, totalPoints: 0 }; }
   }
 
   function interactionButtons(kind) {
@@ -289,6 +319,7 @@
         await api('/api/v1/tips', { method: 'POST', body: { postId, points: amount, message: body.querySelector('#tipMessage').value.trim() } });
         sessionStorage.removeItem('iyesh:me');
         post.counts = { ...(post.counts || {}), tips: Number(post.counts?.tips || 0) + 1 };
+        await loadTips();
         toast(`已打赏 ${amount} ${unitName}，谢谢你的支持`, 'success');
       } catch (requestError) { error.textContent = requestError.message; error.hidden = false; return false; }
     } }] });
@@ -304,7 +335,7 @@
 
   function share() {
     const access = accessInfo(post, unitName);
-    window.Share.open({ id: post.id, title: post.title, excerpt: post.excerpt, author: authorOf(post), cover: post.thumbnail || post.coverImage, topics: topicsOf(post), access: { type: access.type, price: access.price, unit: access.unit }, dateText: dateText(post.publishedAt) });
+    window.Share.open({ id: post.id, title: post.title, excerpt: post.excerpt, author: authorOf(post), cover: post.thumbnail || post.coverImage || post.images?.[0], topics: topicsOf(post), access: { type: access.type, price: access.price, unit: access.unit }, dateText: dateText(post.publishedAt) });
   }
 
   async function handleAction(action) {
@@ -369,6 +400,7 @@
     renderArticle();
     renderActions();
     renderAside([]);
+    loadTips();
     commentSort = 'latest';
     loadComments(true);
     loadRelated();

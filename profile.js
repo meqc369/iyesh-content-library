@@ -274,7 +274,11 @@
     invite: loadInvite,
     filters: loadFilters
   };
-  function currentTab() { const hash = location.hash.slice(1); return TABS.includes(hash) ? hash : LEGACY[hash] || 'posts'; }
+  function currentTab() {
+    const hash = location.hash.slice(1);
+    const queryTab = new URLSearchParams(location.search).get('tab') || '';
+    return TABS.includes(queryTab) ? queryTab : TABS.includes(hash) ? hash : LEGACY[hash] || 'posts';
+  }
   function activate(name, push = true) {
     document.querySelectorAll('[data-tab]').forEach(tab => { const active = tab.dataset.tab === name; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1; if (active && tab.scrollIntoView && push) tab.scrollIntoView({ inline: 'center', block: 'nearest' }); });
     document.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== name; });
