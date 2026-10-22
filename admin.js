@@ -141,6 +141,7 @@
      ================================================================= */
   const VIEWS = [
     { id: 'overview', title: '总览', icon: 'grid', group: '运营', perm: 'dashboard.read', render: renderOverview },
+    { id: 'analytics', title: '访问分析', icon: 'eye', group: '运营', perm: 'dashboard.read', render: renderAnalytics },
     { id: 'content', title: '内容审核', icon: 'file', group: '运营', perm: 'content.read', render: renderContent, badge: 'pendingPosts' },
     { id: 'comments', title: '评论与举报', icon: 'comment', group: '运营', perm: 'content.read', render: renderComments, badge: 'reports' },
     { id: 'users', title: '用户', icon: 'users', group: '运营', perm: 'users.read', render: renderUsers },
@@ -215,6 +216,35 @@
       <div class="two-col">
         ${card({ title: '待办', body: `<div class="todo-list">${todo('篇投稿等待审核', data.pendingPosts, '#content', can('content.read'))}${todo('条举报等待处理', data.reports, '#comments', can('content.read'))}${todo('笔提现等待打款', data.pendingWithdrawals, '#finance', can('finance.manage'))}</div>` })}
         ${card({ title: '快捷操作', body: `<div class="card-body" style="display:flex;flex-wrap:wrap;gap:10px">${can('content.manage') ? `<button class="btn" type="button" data-quick="post">${icon('edit')}新建内容</button>` : ''}${can('finance.manage') ? `<button class="btn" type="button" data-quick="cdkey">${icon('gift')}生成兑换码</button>` : ''}${can('notifications.manage') ? `<button class="btn" type="button" data-quick="message">${icon('bell')}发站内信</button>` : ''}${can('membership.manage') ? `<button class="btn" type="button" data-quick="grant">${icon('member')}手动开通会员</button>` : ''}</div>` })}
+      </div>`;
+  }
+
+  /* ---------------- analytics ---------------- */
+  async function renderAnalytics() {
+    const data = await req('/api/v1/admin/analytics/visits?days=30');
+    const items = data.items || [];
+    const maxViews = Math.max(1, ...items.map(item => Number(item.views || 0)));
+    const today = data.todayStats || items.find(item => item.date === data.today) || { views: 0, uniqueVisitors: 0 };
+    const total = data.totals || { views: 0, uniqueVisitors: 0, devices: {} };
+    const kpi = (label, value, sub = '') => `<div class="kpi"><span>${escapeHtml(label)}</span><strong>${num(value)}</strong>${sub ? `<small>${escapeHtml(sub)}</small>` : ''}</div>`;
+    const bars = items.length ? items.map(item => {
+      const height = Math.max(5, Math.round(Number(item.views || 0) / maxViews * 100));
+      return `<div class="analytics-bar" title="${escapeHtml(item.date)}：${num(item.views)} 次访问，${num(item.uniqueVisitors)} 位访客"><strong>${num(item.views)}</strong><i style="height:${height}%"></i><span>${escapeHtml(item.date.slice(5))}</span></div>`;
+    }).join('') : '<div class="analytics-empty">暂无访问数据，用户打开前台页面后会自动记录。</div>';
+    const list = (rows, empty) => rows?.length ? `<ol class="analytics-list">${rows.map(item => `<li><span>${escapeHtml(item.name)}</span><strong>${num(item.count)}</strong></li>`).join('')}</ol>` : `<p class="hint">${escapeHtml(empty)}</p>`;
+    const devices = total.devices || {};
+    view.innerHTML = `
+      <p class="view-intro">按中国时区统计前台页面访问。仅保存每日汇总，不记录可识别的个人信息。</p>
+      <div class="kpis analytics-kpis">
+        ${kpi('今日访问', today.views, `${num(today.uniqueVisitors)} 位访客`)}
+        ${kpi('近 30 天访问', total.views, `${num(total.uniqueVisitors)} 个访客日`)}
+        ${kpi('移动端访问', devices.mobile || 0, `微信 ${num(devices.wechat || 0)}`)}
+        ${kpi('桌面端访问', devices.desktop || 0, `平板 ${num(devices.tablet || 0)}`)}
+      </div>
+      ${card({ title: '每日访问趋势', hint: '最近 30 天', body: `<div class="analytics-chart"><div class="analytics-bars">${bars}</div></div>` })}
+      <div class="two-col analytics-breakdown">
+        ${card({ title: '热门页面', hint: '访问次数', body: list(data.topPages, '暂无页面数据') })}
+        ${card({ title: '来源网站', hint: '访问次数', body: list(data.topReferrers, '暂无来源数据') })}
       </div>`;
   }
 

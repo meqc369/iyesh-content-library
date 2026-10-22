@@ -417,6 +417,20 @@
     document.addEventListener('focusout', () => { setTimeout(() => { if (!isText(document.activeElement)) document.body.classList.remove('keyboard-open'); }, 80); });
   }
   function track(name, data = {}) { try { if (window.__iyeshTrack) window.__iyeshTrack(name, data); } catch {} }
+  function trackPageView() {
+    if (document.body.hasAttribute('data-skip-me')) return;
+    let visitorId = '';
+    try {
+      visitorId = localStorage.getItem('iyesh:analyticsVisitor') || (crypto.randomUUID ? crypto.randomUUID() : `v_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+      localStorage.setItem('iyesh:analyticsVisitor', visitorId);
+    } catch { visitorId = `v_${Date.now()}_${Math.random().toString(36).slice(2)}`; }
+    const payload = JSON.stringify({ path: `${location.pathname}${location.search ? location.search.slice(0, 120) : ''}`, referrer: document.referrer || '', visitorId, device: window.matchMedia?.('(pointer: coarse)').matches ? 'mobile' : 'desktop' });
+    try {
+      const beacon = new Blob([payload], { type: 'text/plain;charset=UTF-8' });
+      if (navigator.sendBeacon?.(`${API}/api/v1/analytics/visit`, beacon)) return;
+    } catch {}
+    fetch(`${API}/api/v1/analytics/visit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload, keepalive: true }).catch(() => {});
+  }
 
   /* ---------------- misc ---------------- */
   function debounce(fn, wait = 250) { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), wait); }; }
@@ -508,5 +522,6 @@
   document.querySelectorAll('[data-icon]').forEach(node => { node.insertAdjacentHTML('afterbegin', icon(node.dataset.icon)); });
   markNav();
   watchKeyboard();
+  trackPageView();
   if (!document.body.hasAttribute('data-skip-me')) refreshMe();
 })();

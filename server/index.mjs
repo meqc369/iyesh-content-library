@@ -24,6 +24,10 @@ const TRACK_DISCOVERY_SOURCE_URL = String(process.env.TRACK_DISCOVERY_SOURCE_URL
 const TRACK_DISCOVERY_SYNC_INTERVAL_MS = Math.max(60 * 60 * 1000, Number(process.env.TRACK_DISCOVERY_SYNC_INTERVAL_MS || 4 * 60 * 60 * 1000) || 4 * 60 * 60 * 1000)
 const TRACK_DISCOVERY_MAX_ITEMS = 60
 const TRACK_DISCOVERY_MAX_SECTORS = 16
+const SITE_ANALYTICS_RETENTION_DAYS = Math.max(14, Math.min(730, Number(process.env.SITE_ANALYTICS_RETENTION_DAYS || 90) || 90))
+const SITE_ANALYTICS_MAX_PAGES = 80
+const SITE_ANALYTICS_MAX_REFERRERS = 40
+const SITE_ANALYTICS_MAX_VISITORS_PER_DAY = 20000
 const UPLOAD_PUBLIC_BASE_URL = String(process.env.UPLOAD_PUBLIC_BASE_URL || '').replace(/\/+$/, '')
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 // Share links are consumed by the H5 share sheet and by social previews. Keep
@@ -112,7 +116,8 @@ const DEFAULT_STORE = {
   cdkeys: [],
   cdkeyRedemptions: [],
   auditLogs: [],
-  trackDiscovery: { status: 'pending', syncedAt: null, sourceGeneratedAt: null, sourceRun: null, summary: {}, sectors: [], items: [], lastError: null }
+  trackDiscovery: { status: 'pending', syncedAt: null, sourceGeneratedAt: null, sourceRun: null, summary: {}, sectors: [], items: [], lastError: null },
+  siteAnalytics: { days: {} }
 }
 let savedFilters = new Map()
 let profiles = new Map()
@@ -149,6 +154,8 @@ let cdkeys = []
 let cdkeyRedemptions = []
 let auditLogs = []
 let trackDiscovery = { status: 'pending', syncedAt: null, sourceGeneratedAt: null, sourceRun: null, summary: {}, sectors: [], items: [], lastError: null }
+let siteAnalytics = { days: {} }
+let analyticsPersistTimer = null
 let persistQueue = Promise.resolve()
 
 function normalizeTrackDiscovery(value = {}) {
@@ -206,6 +213,93 @@ function normalizeTrackDiscovery(value = {}) {
     items,
     lastError: null
   }
+}
+
+function analyticsDateKey(value = Date.now()) {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date(value)) }
+  catch { return new Date(value).toISOString().slice(0, 10) }
+}
+function normalizeCounterMap(value, limit) {
+  if (!value || typeof value !== 'object') return {}
+  return Object.fromEntries(Object.entries(value).filter(([key]) => key && String(key).length <= 160).sort(([, a], [, b]) => Number(b || 0) - Number(a || 0)).slice(0, limit).map(([key, count]) => [String(key), Math.max(0, Math.floor(Number(count) || 0))]))
+}
+function normalizeAnalyticsDay(value = {}) {
+  const source = value && typeof value === 'object' ? value : {}
+  const visitors = Array.isArray(source.visitors) ? [...new Set(source.visitors.map(item => String(item || '').slice(0, 64)).filter(Boolean))].slice(0, SITE_ANALYTICS_MAX_VISITORS_PER_DAY) : []
+  return {
+    views: Math.max(0, Math.floor(Number(source.views || source.visits || 0) || 0)),
+    uniqueVisitors: Math.max(0, Math.floor(Number(source.uniqueVisitors || visitors.length || 0) || 0)),
+    pages: normalizeCounterMap(source.pages, SITE_ANALYTICS_MAX_PAGES),
+    referrers: normalizeCounterMap(source.referrers, SITE_ANALYTICS_MAX_REFERRERS),
+    devices: { mobile: Math.max(0, Math.floor(Number(source.devices?.mobile || 0) || 0)), desktop: Math.max(0, Math.floor(Number(source.devices?.desktop || 0) || 0)), tablet: Math.max(0, Math.floor(Number(source.devices?.tablet || 0) || 0)), wechat: Math.max(0, Math.floor(Number(source.devices?.wechat || 0) || 0)) },
+    visitors
+  }
+}
+function normalizeSiteAnalytics(value = {}) {
+  const days = value?.days && typeof value.days === 'object' ? value.days : value
+  const entries = Object.entries(days || {}).filter(([date]) => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort(([a], [b]) => b.localeCompare(a)).slice(0, SITE_ANALYTICS_RETENTION_DAYS)
+  return { days: Object.fromEntries(entries.map(([date, item]) => [date, normalizeAnalyticsDay(item)])) }
+}
+function analyticsDevice(req, input = {}) {
+  const userAgent = String(req.headers['user-agent'] || '').toLowerCase()
+  if (/micromessenger/.test(userAgent)) return 'wechat'
+  const hint = String(input.device || '').toLowerCase()
+  if (hint === 'tablet' || /ipad|tablet/.test(userAgent)) return 'tablet'
+  if (hint === 'mobile' || /mobile|android|iphone|ipod/.test(userAgent)) return 'mobile'
+  return 'desktop'
+}
+function analyticsPath(value) {
+  const raw = String(value || '/').trim()
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/'
+  return raw.split(/[?#]/, 1)[0].slice(0, 160) || '/'
+}
+function analyticsReferrer(value) {
+  try {
+    const raw = String(value || '').trim()
+    if (!raw) return '直接访问'
+    const parsed = new URL(raw)
+    return parsed.hostname.replace(/^www\./, '').slice(0, 100) || '直接访问'
+  } catch { return '其他来源' }
+}
+function recordAnalyticsVisit(req, input = {}) {
+  const date = analyticsDateKey()
+  const current = siteAnalytics.days[date] || normalizeAnalyticsDay()
+  const visitorId = String(input.visitorId || '').trim().slice(0, 120) || requestIp(req)
+  if (visitorId) {
+    const digest = createHash('sha256').update(`${date}:${visitorId}`).digest('hex').slice(0, 32)
+    if (!current.visitors.includes(digest) && current.visitors.length < SITE_ANALYTICS_MAX_VISITORS_PER_DAY) {
+      current.visitors.push(digest)
+      current.uniqueVisitors += 1
+    }
+  }
+  current.views += 1
+  const path = analyticsPath(input.path)
+  current.pages[path] = (current.pages[path] || 0) + 1
+  const referrer = analyticsReferrer(input.referrer)
+  current.referrers[referrer] = (current.referrers[referrer] || 0) + 1
+  const device = analyticsDevice(req, input)
+  current.devices[device] = (current.devices[device] || 0) + 1
+  siteAnalytics.days[date] = normalizeAnalyticsDay(current)
+  siteAnalytics = normalizeSiteAnalytics(siteAnalytics)
+  return { date, views: current.views, uniqueVisitors: current.uniqueVisitors }
+}
+function analyticsSummary({ days = 30 } = {}) {
+  const limit = Math.min(90, Math.max(1, Number(days) || 30))
+  const today = analyticsDateKey()
+  const todayStats = siteAnalytics.days[today] || normalizeAnalyticsDay()
+  const items = Array.from({ length: limit }, (_, index) => {
+    const date = analyticsDateKey(Date.now() - (limit - index - 1) * 86400000)
+    const item = siteAnalytics.days[date] || normalizeAnalyticsDay()
+    return { date, views: item.views, uniqueVisitors: item.uniqueVisitors, devices: item.devices }
+  })
+  const totals = items.reduce((summary, item) => { summary.views += item.views; summary.uniqueVisitors += item.uniqueVisitors; for (const key of Object.keys(summary.devices)) summary.devices[key] += Number(item.devices?.[key] || 0); return summary }, { views: 0, uniqueVisitors: 0, devices: { mobile: 0, desktop: 0, tablet: 0, wechat: 0 } })
+  const aggregate = (key, limit) => { const counts = {}; const recentDays = Object.entries(siteAnalytics.days).sort(([a], [b]) => b.localeCompare(a)).slice(0, limit); for (const [, item] of recentDays) for (const [name, count] of Object.entries(item[key] || {})) counts[name] = (counts[name] || 0) + Number(count || 0); return Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 10).map(([name, count]) => ({ name, count })) }
+  return { today, todayStats: { views: todayStats.views, uniqueVisitors: todayStats.uniqueVisitors, devices: todayStats.devices }, range: limit, items, totals, topPages: aggregate('pages', limit), topReferrers: aggregate('referrers', limit), retentionDays: SITE_ANALYTICS_RETENTION_DAYS }
+}
+function scheduleAnalyticsPersist() {
+  if (analyticsPersistTimer) return
+  analyticsPersistTimer = setTimeout(() => { analyticsPersistTimer = null; persistStore().catch(() => {}) }, 1500)
+  analyticsPersistTimer.unref?.()
 }
 
 async function loadStore() {
@@ -270,6 +364,7 @@ async function loadStore() {
   cdkeyRedemptions = Array.isArray(data.cdkeyRedemptions) ? data.cdkeyRedemptions : []
   auditLogs = Array.isArray(data.auditLogs) ? data.auditLogs : []
   trackDiscovery = normalizeTrackDiscovery(data.trackDiscovery)
+  siteAnalytics = normalizeSiteAnalytics(data.siteAnalytics)
   posts = posts.map(post => ({ ...post, status: post.status || 'published', accessType: ['free', 'member', 'paid'].includes(post.accessType) ? post.accessType : 'free', pricePoints: normalizePoints(post.pricePoints ?? post.priceCents), priceCents: 0, memberPlanIds: Array.isArray(post.memberPlanIds) ? post.memberPlanIds : [], coverImage: normalizeUploadedUrl(post.coverImage), images: normalizeUploadedImages(post.images), counts: { anchors: 0, likes: 0, comments: 0, favorites: 0, tips: 0, ...(post.counts || {}) } }))
   if (seededAdmin || seededReferralCodes) await persistStore()
 }
@@ -279,7 +374,7 @@ async function persistStore() {
     await mkdir(dirname(DATA_FILE), { recursive: true })
     const temporary = `${DATA_FILE}.tmp-${process.pid}-${Date.now()}-${randomBytes(8).toString('hex')}`
     try {
-      await writeFile(temporary, JSON.stringify({ posts, tags, savedFilters: Object.fromEntries(savedFilters), profiles: Object.fromEntries(profiles), notifications: Object.fromEntries(notifications), reports, commentReports, comments: Object.fromEntries(comments), interactions: Object.fromEntries(interactions), memberGroups, plans, memberships: Object.fromEntries(memberships), entitlements, orders, tips, paymentEvents, pointsAccounts: Object.fromEntries(pointsAccounts), pointsLedger, pointsConfig, referralConfig, referralRelations: Object.fromEntries(referralRelations), referralCommissions, checkinConfig, checkins: Object.fromEntries(checkins), withdrawals, accounts: Object.fromEntries(accounts), admins: Object.fromEntries(admins), emailVerifications, smtpConfig, cdkeys: cdkeys.map(({ code, ...item }) => item), cdkeyRedemptions, auditLogs, trackDiscovery }, null, 2))
+      await writeFile(temporary, JSON.stringify({ posts, tags, savedFilters: Object.fromEntries(savedFilters), profiles: Object.fromEntries(profiles), notifications: Object.fromEntries(notifications), reports, commentReports, comments: Object.fromEntries(comments), interactions: Object.fromEntries(interactions), memberGroups, plans, memberships: Object.fromEntries(memberships), entitlements, orders, tips, paymentEvents, pointsAccounts: Object.fromEntries(pointsAccounts), pointsLedger, pointsConfig, referralConfig, referralRelations: Object.fromEntries(referralRelations), referralCommissions, checkinConfig, checkins: Object.fromEntries(checkins), withdrawals, accounts: Object.fromEntries(accounts), admins: Object.fromEntries(admins), emailVerifications, smtpConfig, cdkeys: cdkeys.map(({ code, ...item }) => item), cdkeyRedemptions, auditLogs, trackDiscovery, siteAnalytics }, null, 2))
       await rename(temporary, DATA_FILE)
     } finally {
       await unlink(temporary).catch(() => {})
@@ -1161,6 +1256,7 @@ function adminPermissionFor(pathname, method) {
   const [first, second, third] = segments
   const read = method === 'GET' || method === 'HEAD'
   if (first === 'overview' && segments.length === 1) return 'dashboard.read'
+  if (first === 'analytics' && second === 'visits') return 'dashboard.read'
   if (first === 'auth') return second === 'me' && segments.length === 2 ? 'dashboard.read' : 'system.admins'
   if (first === 'admins') return 'system.admins'
   if (first === 'smtp' || (first === 'settings' && second === 'smtp')) return 'system.settings'
@@ -1759,6 +1855,14 @@ const server = http.createServer(async (req, res) => {
       if (stale) syncTrackDiscovery().catch(() => {})
       return json(res, 200, { ...trackDiscovery, syncIntervalHours: Math.round(TRACK_DISCOVERY_SYNC_INTERVAL_MS / 3600000), nextSyncAt: lastSyncAt ? new Date(lastSyncAt + TRACK_DISCOVERY_SYNC_INTERVAL_MS).toISOString() : null, stale })
     }
+    if (req.method === 'POST' && url.pathname === '/api/v1/analytics/visit') {
+      const input = await readBody(req)
+      const result = recordAnalyticsVisit(req, input)
+      // Analytics is an append-only aggregate. Debounce disk writes so a burst
+      // of page views does not rewrite the complete JSON store per request.
+      scheduleAnalyticsPersist()
+      return json(res, 202, { accepted: true, ...result })
+    }
     const uploadAssetMatch = url.pathname.match(/^\/uploads\/([A-Za-z0-9][A-Za-z0-9._-]*)$/)
     if (req.method === 'GET' && uploadAssetMatch) {
       try {
@@ -2212,7 +2316,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/v1/tips') {
       const postId = url.searchParams.get('postId')
-      const allItems = tips.filter(tip => tip.status === 'paid' && (!postId || tip.postId === postId)).map(tip => ({ ...tip, userId: tip.anonymous ? null : tip.userId, message: tip.message || '' }))
+      const allItems = tips.filter(tip => tip.status === 'paid' && (!postId || tip.postId === postId)).map(tip => {
+        const account = !tip.anonymous ? accounts.get(tip.userId) : null
+        const profile = account ? profileFor(account) : null
+        const supporter = tip.anonymous ? null : { id: tip.userId, name: profile?.name || account?.name || account?.username || '社区用户', avatarUrl: profile?.avatarUrl || account?.avatarUrl || null }
+        return { ...tip, userId: tip.anonymous ? null : tip.userId, message: tip.message || '', supporter }
+      })
       const page = paginate(allItems, Object.fromEntries(url.searchParams))
       return json(res, 200, { ...page, totalPoints: allItems.reduce((sum, item) => sum + Number(item.points || 0), 0), totalCents: allItems.reduce((sum, item) => sum + Number(item.amountCents || 0), 0) })
     }
@@ -2548,6 +2657,7 @@ const server = http.createServer(async (req, res) => {
         const pointsInCirculation = [...pointsAccounts.values()].reduce((total, value) => total + Number(value || 0), 0)
         return json(res, 200, { posts: activePostCount, publishedPosts: posts.filter(item => item.status === 'published').length, pendingPosts: posts.filter(item => item.status === 'pending').length, tags: Object.values(tags).reduce((total, values) => total + values.length, 0), comments: [...comments.values()].reduce((total, values) => total + values.length, 0), reports: reports.filter(report => report.status === 'pending').length + commentReports.filter(report => report.status === 'pending').length, plans: activePlans().length, memberGroups: memberGroups.filter(group => group.status === 'active').length, memberships: [...memberships.values()].reduce((total, values) => total + values.filter(item => item.status === 'active').length, 0), orders: orders.length, paidOrders: paidOrderCount, revenueCents: orders.filter(item => item.status === 'paid').reduce((total, item) => total + Number(item.amountCents || 0), 0), tipsCents: tips.filter(item => item.status === 'paid').reduce((total, item) => total + Number(item.amountCents || 0), 0), tipsPoints: tips.filter(item => item.status === 'paid').reduce((total, item) => total + Number(item.points || 0), 0), points: pointsInCirculation, pointsAccounts: pointsAccounts.size, pointsInCirculation, pointsTransactions: pointsLedger.length, recharges: pointsLedger.filter(item => item.type === 'admin_recharge').length, withdrawals: withdrawals.length, pendingWithdrawals: withdrawals.filter(item => item.status === 'pending').length, auditLogs: auditLogs.length, users: accounts.size, newUsers7d: [...accounts.values()].filter(item => item.createdAt && Date.now() - new Date(item.createdAt).getTime() < 7 * 86400000).length, posts7d: posts.filter(item => item.status === 'published' && item.publishedAt && Date.now() - new Date(item.publishedAt).getTime() < 7 * 86400000).length, checkinsToday: [...checkins.values()].flat().filter(record => record.checkinDate === checkinDateKey()).length })
       }
+      if (req.method === 'GET' && url.pathname === '/api/v1/admin/analytics/visits') return json(res, 200, analyticsSummary({ days: url.searchParams.get('days') || 30 }))
       if (req.method === 'GET' && url.pathname === '/api/v1/admin/reports') {
         const status = url.searchParams.get('status'); const postId = url.searchParams.get('postId')
         const items = reports.filter(report => (!status || report.status === status) && (!postId || report.postId === postId)).map(report => ({ ...report, post: posts.find(post => post.id === report.postId) ? { id: report.postId, title: posts.find(post => post.id === report.postId).title, status: posts.find(post => post.id === report.postId).status } : null }))

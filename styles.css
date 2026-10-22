@@ -671,22 +671,22 @@ body.modal-open { overflow: hidden; }
 .tip-wall__total { flex: none; display: inline-flex; align-items: baseline; gap: 5px; color: #145c3e; white-space: nowrap; }
 .tip-wall__total .num { font-size: 22px; }
 .tip-wall__total small { font-size: 12px; font-weight: 650; }
-.tip-wall__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
-.tip-card { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 9px; padding: 11px 12px; border: 1px solid #e1eee6; border-radius: 13px; background: #fff; }
-.tip-card__avatar { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #e5f2e9; color: #1b7550; font-size: 12px; font-weight: 750; }
-.tip-card__body { min-width: 0; }
-.tip-card__body strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 13px; }
-.tip-card__body p { margin-top: 2px; overflow: hidden; color: var(--ink-2); font-size: 12px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
-.tip-card__body p.is-muted { color: var(--faint); }
-.tip-card__body time { display: block; margin-top: 3px; color: var(--faint); font-size: 11px; }
-.tip-card__amount { align-self: center; color: #1b7550; font: 700 12px/1.3 var(--font-num); white-space: nowrap; }
-.tip-wall__more { margin-top: 12px; color: #5f7f70; font-size: 12px; text-align: center; }
+.tip-wall__avatars { display: flex; align-items: center; min-height: 42px; margin-top: 18px; padding: 2px 4px; }
+.tip-wall__avatar { position: relative; z-index: 1; display: grid; place-items: center; width: 42px; height: 42px; margin-left: -8px; border: 3px solid #f4faf6; border-radius: 50%; background: #fff; box-shadow: 0 3px 10px rgba(20, 76, 52, .14); transition: transform .15s ease, z-index .15s ease; }
+.tip-wall__avatar:first-child { margin-left: 0; }
+.tip-wall__avatar:hover { z-index: 2; transform: translateY(-3px); }
+.tip-wall__avatar .avatar { --size: 36px; width: var(--size); height: var(--size); font-size: 13px; }
+.tip-wall__avatar--more { color: #145c3e; background: #e5f2e9; font: 700 12px/1 var(--font-num); }
+.tip-wall__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; color: #5f7f70; font-size: 12px; }
+.tip-wall__foot strong { color: #145c3e; font: 700 12px/1.3 var(--font-num); white-space: nowrap; }
 @media (max-width: 759px) {
   .tip-wall { margin-top: 24px; padding: 16px 14px 14px; border-radius: 16px; }
   .tip-wall__head { gap: 10px; }
   .tip-wall__head p { max-width: 23em; }
-  .tip-wall__list { grid-template-columns: 1fr; margin-top: 14px; }
-  .tip-card { padding: 10px; }
+  .tip-wall__avatars { margin-top: 15px; }
+  .tip-wall__avatar { width: 38px; height: 38px; margin-left: -7px; }
+  .tip-wall__avatar .avatar { --size: 32px; }
+  .tip-wall__foot { align-items: flex-start; flex-direction: column; gap: 5px; }
 }
 .article-foot { margin-top: 18px; display: flex; justify-content: flex-end; }
 .article-foot .text-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }

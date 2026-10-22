@@ -43,6 +43,8 @@ node index.mjs
 - `GET /api/v1/tips|me/tips`、`POST /api/v1/tips`（按积分打赏）
 - `GET /api/v1/me/points|me/points/ledger`（当前用户积分余额与流水）
 - `GET /api/v1/admin/overview`
+- `POST /api/v1/analytics/visit`（前台页面访问埋点；仅保存每日聚合数据）
+- `GET /api/v1/admin/analytics/visits?days=30`（管理员访问趋势、设备、热门页面和来源统计）
 - `POST /api/v1/admin/auth/login`、`GET /api/v1/admin/auth/me`（管理员账号登录；`x-admin-token` 会话默认 30 天）
 - `GET|POST|PATCH /api/v1/admin/admins`、`PATCH /api/v1/admin/admins/:id`（多管理员与预设角色：超级管理员、内容管理员、财务管理员、客服管理员；停用而不删除）
 - `GET|POST|PATCH|DELETE /api/v1/admin/member-groups|member-plans`（会员组权限和计划初始赠送积分可配置）

@@ -115,24 +115,28 @@
   function renderTipWall() {
     const mount = article.querySelector('#tipWall');
     if (!mount) return;
-    const items = (tipSummary.items || []).slice(0, 6);
+    const items = (tipSummary.items || []).slice(0, 12);
     if (!items.length) { mount.innerHTML = ''; return; }
     const total = Number(tipSummary.totalPoints || items.reduce((sum, item) => sum + Number(item.points || 0), 0));
+    const supporterCount = Number(tipSummary.total || items.length);
+    const avatarItems = items.map(item => {
+      const anonymous = Boolean(item.anonymous) || !item.userId;
+      const supporter = item.supporter || {};
+      const label = anonymous ? '匿名支持' : supporter.name || '社区用户';
+      const avatar = anonymous ? avatarHtml({ id: 'anonymous', name: '匿' }, 38) : avatarHtml({ id: supporter.id || item.userId, name: supporter.name || '友', avatarUrl: supporter.avatarUrl }, 38);
+      return `<span class="tip-wall__avatar" role="listitem" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${avatar}</span>`;
+    }).join('');
+    const extra = supporterCount > items.length ? `<span class="tip-wall__avatar tip-wall__avatar--more" role="listitem" aria-label="还有 ${escapeHtml(num(supporterCount - items.length))} 位支持者" title="还有更多支持者">+${num(supporterCount - items.length)}</span>` : '';
     mount.innerHTML = `<section class="tip-wall" aria-label="收到的打赏">
-      <div class="tip-wall__head"><div><h2>${icon('gift')}收到的打赏</h2><p>感谢每一份支持，作者会继续更新实战内容。</p></div><strong class="tip-wall__total"><span class="num">${num(total)}</span><small>${escapeHtml(unitName)}</small></strong></div>
-      <div class="tip-wall__list">${items.map(item => {
-        const anonymous = Boolean(item.anonymous) || !item.userId;
-        const supporter = anonymous ? '匿名支持' : '社区用户';
-        const message = String(item.message || '').trim();
-        return `<article class="tip-card"><span class="tip-card__avatar" data-tone="${anonymous ? '4' : '2'}">${anonymous ? '匿' : '友'}</span><div class="tip-card__body"><strong>${supporter}</strong>${message ? `<p>${escapeHtml(message)}</p>` : '<p class="is-muted">送来了一份支持</p>'}<time>${escapeHtml(relativeTime(item.createdAt))}</time></div><span class="tip-card__amount">+${num(item.points)} ${escapeHtml(unitName)}</span></article>`;
-      }).join('')}</div>
-      ${Number(tipSummary.total || 0) > items.length ? `<p class="tip-wall__more">共 ${num(tipSummary.total)} 次支持</p>` : ''}
+      <div class="tip-wall__head"><div><h2>${icon('gift')}收到的打赏</h2><p>感谢每一份支持，作者会继续更新实战内容。</p></div><strong class="tip-wall__total"><span class="num">${num(supporterCount)}</span><small>位支持者</small></strong></div>
+      <div class="tip-wall__avatars" role="list" aria-label="支持者头像">${avatarItems}${extra}</div>
+      <div class="tip-wall__foot"><span>大家的支持会持续转化为更新动力</span><strong>累计 ${num(total)} ${escapeHtml(unitName)}</strong></div>
     </section>`;
   }
 
   async function loadTips() {
     try {
-      const body = await api(`/api/v1/tips?postId=${encodeURIComponent(postId)}&pageSize=6`, { auth: false });
+      const body = await api(`/api/v1/tips?postId=${encodeURIComponent(postId)}&pageSize=12`, { auth: false });
       tipSummary = { items: body.items || [], total: Number(body.total || 0), totalPoints: Number(body.totalPoints || 0) };
       renderTipWall();
     } catch { tipSummary = { items: [], total: 0, totalPoints: 0 }; }
