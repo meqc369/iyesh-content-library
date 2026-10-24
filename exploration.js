@@ -6,6 +6,7 @@
   const dateText = App.dateText;
   let sectorItems = [];
   let resultItems = [];
+  let activeSector = String(new URLSearchParams(window.location.search).get('sector') || '').trim();
   let visibleSectorCount = 6;
   let visibleResultCount = 12;
 
@@ -33,16 +34,33 @@
   function renderSectors(data, reset = true) {
     if (reset) {
       sectorItems = Array.isArray(data.sectors) ? data.sectors : [];
+      if (activeSector && !sectorItems.some(sector => sector.name === activeSector)) activeSector = '';
       visibleSectorCount = Math.min(6, sectorItems.length || 6);
+      const activeIndex = sectorItems.findIndex(sector => sector.name === activeSector);
+      if (activeIndex >= visibleSectorCount) visibleSectorCount = activeIndex + 1;
     }
     if (!sectorItems.length) { $('#sectors').innerHTML = empty('还没有可展示的赛道', '下一轮研究完成后，这里会出现新的方向信号。'); return; }
     const sectors = sectorItems.slice(0, visibleSectorCount);
     const cards = sectors.map((sector, index) => {
       const examples = Array.isArray(sector.examples) ? sector.examples.slice(0, 2) : [];
-      return `<article class="explore-sector"><div class="explore-sector__top"><span class="explore-sector__index">${String(index + 1).padStart(2, '0')}</span><span class="tag tag--${sector.status === 'potential' ? 'paid' : 'info'}">${sector.status === 'potential' ? '潜力方向' : '持续增长'}</span></div><h3>${esc(sector.name)}</h3><div class="explore-sector__metrics"><span><strong class="num">${esc(metric(sector.growingChannelCount))}</strong> 个增长样本</span><span><strong class="num">${esc(metric(sector.channelCount))}</strong> 个频道</span></div>${examples.length ? `<div class="explore-sector__examples">${examples.map(example => `<span title="${esc(example.title)}">${esc(example.title || '频道样本')}</span>`).join('')}</div>` : ''}</article>`;
+      const selected = activeSector === sector.name;
+      return `<article class="explore-sector${selected ? ' is-selected' : ''}"><button class="explore-sector__trigger" type="button" aria-pressed="${selected}" data-sector-name="${esc(sector.name)}"><span class="explore-sector__top"><span class="explore-sector__index">${String(index + 1).padStart(2, '0')}</span><span class="tag tag--${sector.status === 'potential' ? 'paid' : 'info'}">${sector.status === 'potential' ? '潜力方向' : '持续增长'}</span></span><span class="explore-sector__title" role="heading" aria-level="3">${esc(sector.name)}<span class="explore-sector__open" aria-hidden="true">查看样本 ↗</span></span><span class="explore-sector__metrics"><span><strong class="num">${esc(metric(sector.growingChannelCount))}</strong> 个增长样本</span><span><strong class="num">${esc(metric(sector.channelCount))}</strong> 个频道</span></span></button>${examples.length ? `<div class="explore-sector__examples">${examples.map(example => { const channelHref = example.youtubeId ? `https://www.youtube.com/channel/${encodeURIComponent(example.youtubeId)}` : ''; return channelHref ? `<a href="${esc(channelHref)}" target="_blank" rel="noopener" title="打开 ${esc(example.title || '频道样本')}">${esc(example.title || '频道样本')} ↗</a>` : `<span title="${esc(example.title)}">${esc(example.title || '频道样本')}</span>`; }).join('')}</div>` : ''}</article>`;
     }).join('');
     const more = sectorItems.length > visibleSectorCount ? `<div class="explore-more"><button class="btn" type="button" id="showMoreSectors">查看更多赛道（剩余 ${sectorItems.length - visibleSectorCount} 个）</button></div>` : '';
     $('#sectors').innerHTML = cards + more;
+    document.querySelectorAll('[data-sector-name]').forEach(trigger => {
+      const open = () => {
+        const nextSector = trigger.dataset.sectorName || '';
+        setSectorFilter(activeSector === nextSector ? '' : nextSector);
+        document.querySelector('#results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      trigger.addEventListener('click', open);
+    });
+    const clearFilter = document.querySelector('#clearSectorFilter');
+    if (clearFilter) {
+      clearFilter.hidden = !activeSector;
+      clearFilter.onclick = () => setSectorFilter('');
+    }
     document.querySelector('#showMoreSectors')?.addEventListener('click', () => {
       visibleSectorCount = sectorItems.length;
       renderSectors({ sectors: sectorItems }, false);
@@ -51,23 +69,47 @@
   function renderResults(data, reset = true) {
     if (reset) {
       resultItems = Array.isArray(data.items) ? data.items : [];
-      visibleResultCount = Math.min(12, resultItems.length || 12);
+      visibleResultCount = Math.min(12, filteredResults().length || 12);
     }
-    if (!resultItems.length) { $('#results').innerHTML = empty('暂时没有成功样本', '研究系统会在下一轮同步后补充新的频道与视频。'); return; }
-    const items = resultItems.slice(0, visibleResultCount);
+    const availableItems = filteredResults();
+    const resultTitle = $('#resultTitle');
+    const clearFilter = $('#clearSectorFilter');
+    if (resultTitle) resultTitle.textContent = activeSector ? `${activeSector} · 相关样本` : '值得继续观察';
+    if (clearFilter) clearFilter.hidden = !activeSector;
+    if (!availableItems.length) {
+      $('#results').innerHTML = empty(activeSector ? '这个赛道暂时没有成功样本' : '暂时没有成功样本', activeSector ? '可以先查看其他方向，或等待下一轮研究同步。' : '研究系统会在下一轮同步后补充新的频道与视频。');
+      return;
+    }
+    const items = availableItems.slice(0, visibleResultCount);
     const cards = items.map(item => {
       const video = item.video || {};
-      const href = video.url || item.channelUrl || '#';
+      const href = video.url || item.channelUrl || '';
       const growth = item.growthLabel || (item.growthStatus === 'accelerating' ? '正在加速' : '成功样本');
       const thumb = video.thumbnailUrl ? `<img src="${esc(video.thumbnailUrl)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : '<span class="explore-result__thumb-empty" aria-hidden="true">YT</span>';
-      return `<article class="explore-result"><a class="explore-result__thumb" href="${esc(href)}" target="_blank" rel="noopener" aria-label="打开 ${esc(video.title || item.title || 'YouTube 样本')}">${thumb}</a><div class="explore-result__body"><div class="explore-result__meta"><span class="tag tag--ok">${esc(growth)}</span><span>${esc(item.sectorName || '其他赛道')}</span></div><h3><a href="${esc(href)}" target="_blank" rel="noopener">${esc(video.title || item.title || '未命名样本')}</a></h3><p class="explore-result__channel">${esc(item.title || '未知频道')} · ${metric(item.subscriberCount)} 订阅</p><div class="explore-result__foot"><span>播放 ${metric(video.viewCount)}</span><span>时速 ${metric(item.observedGrowth?.viewsPerHour)}</span></div></div></article>`;
+      const media = href ? `<a class="explore-result__thumb" href="${esc(href)}" target="_blank" rel="noopener" aria-label="打开 ${esc(video.title || item.title || 'YouTube 样本')}">${thumb}</a>` : `<div class="explore-result__thumb" aria-hidden="true">${thumb}</div>`;
+      const title = video.title || item.title || '未命名样本';
+      const titleMarkup = href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title);
+      return `<article class="explore-result">${media}<div class="explore-result__body"><div class="explore-result__meta"><span class="tag tag--ok">${esc(growth)}</span><span>${esc(item.sectorName || '其他赛道')}</span></div><h3>${titleMarkup}</h3><p class="explore-result__channel">${esc(item.title || '未知频道')} · ${metric(item.subscriberCount)} 订阅</p><div class="explore-result__foot"><span>播放 ${metric(video.viewCount)}</span><span>时速 ${metric(item.observedGrowth?.viewsPerHour)}</span></div></div></article>`;
     }).join('');
-    const more = resultItems.length > visibleResultCount ? `<div class="explore-more"><button class="btn" type="button" id="showMoreResults">查看更多样本（剩余 ${resultItems.length - visibleResultCount} 个）</button></div>` : '';
+    const more = availableItems.length > visibleResultCount ? `<div class="explore-more"><button class="btn" type="button" id="showMoreResults">查看更多样本（剩余 ${availableItems.length - visibleResultCount} 个）</button></div>` : '';
     $('#results').innerHTML = cards + more;
     document.querySelector('#showMoreResults')?.addEventListener('click', () => {
-      visibleResultCount = Math.min(resultItems.length, visibleResultCount + 12);
+      visibleResultCount = Math.min(availableItems.length, visibleResultCount + 12);
       renderResults({ items: resultItems }, false);
     });
+  }
+  function filteredResults() {
+    return activeSector ? resultItems.filter(item => String(item.sectorName || '').trim() === activeSector) : resultItems;
+  }
+  function setSectorFilter(sectorName) {
+    activeSector = String(sectorName || '').trim();
+    const nextUrl = new URL(window.location.href);
+    if (activeSector) nextUrl.searchParams.set('sector', activeSector);
+    else nextUrl.searchParams.delete('sector');
+    window.history.replaceState(null, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    visibleResultCount = 12;
+    renderSectors({ sectors: sectorItems }, false);
+    renderResults({ items: resultItems }, true);
   }
   function renderMeta(data) {
     const syncedAt = data.syncedAt ? dateText(data.syncedAt, true) : '';
