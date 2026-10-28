@@ -4,7 +4,10 @@
   const App = window.App;
   const { api, session, icon } = App;
   const params = new URLSearchParams(location.search);
-  const referralCode = String(params.get('ref') || params.get('referralCode') || '').trim().slice(0, 80);
+  const urlReferral = String(params.get('ref') || params.get('referralCode') || '').trim().slice(0, 80);
+  const storedReferral = (() => { try { return String(localStorage.getItem('iyesh:ref') || '').trim().slice(0, 80); } catch { return ''; } })();
+  const referralCode = urlReferral || storedReferral;
+  const forgetReferral = () => { try { localStorage.removeItem('iyesh:ref'); } catch {} };
   const forms = { login: document.querySelector('#loginForm'), register: document.querySelector('#registerForm'), reset: document.querySelector('#resetForm') };
   const message = document.querySelector('#authMessage');
   const timers = {};
@@ -77,7 +80,16 @@
     if (password.length < 8) return invalid(form, 'password', '密码至少 8 位');
     withButton(form, async () => {
       say('正在创建账号…');
-      const data = await api('/api/v1/auth/register', { method: 'POST', auth: false, body: { username, email, code, password, referralCode: referralCode || undefined } });
+      const register = ref => api('/api/v1/auth/register', { method: 'POST', auth: false, body: { username, email, code, password, referralCode: ref || undefined } });
+      let data;
+      try { data = await register(referralCode); }
+      catch (error) {
+        // A remembered invite from an old visit may have expired; don't let it block sign-up.
+        if (urlReferral || !storedReferral || !/邀请/.test(error.message)) throw error;
+        forgetReferral();
+        data = await register('');
+      }
+      forgetReferral();
       done(data, '注册成功，欢迎加入月入万刀');
     });
   });
@@ -141,7 +153,7 @@
     const notice = document.querySelector('#refNotice');
     notice.hidden = false;
     notice.innerHTML = `${icon('gift')}<span>你收到了好友邀请，注册后会自动绑定邀请关系。</span>`;
-    setMode('register');
+    if (urlReferral) setMode('register'); else if (params.get('mode') === 'register') setMode('register'); else setMode('login');
   } else if (params.get('mode') === 'register') setMode('register');
   else setMode('login');
   if (session.loggedIn() && !referralCode) say('你已登录，可以直接返回继续浏览。');

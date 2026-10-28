@@ -33,7 +33,8 @@
   }
   function renderSectors(data, reset = true) {
     if (reset) {
-      sectorItems = Array.isArray(data.sectors) ? data.sectors : [];
+      // The catch-all bucket is not a direction; keep it after the real tracks.
+      sectorItems = (Array.isArray(data.sectors) ? data.sectors : []).slice().sort((a, b) => (a.status === 'unclassified') - (b.status === 'unclassified'));
       if (activeSector && !sectorItems.some(sector => sector.name === activeSector)) activeSector = '';
       visibleSectorCount = Math.min(6, sectorItems.length || 6);
       const activeIndex = sectorItems.findIndex(sector => sector.name === activeSector);
@@ -44,7 +45,7 @@
     const cards = sectors.map((sector, index) => {
       const examples = Array.isArray(sector.examples) ? sector.examples.slice(0, 2) : [];
       const selected = activeSector === sector.name;
-      return `<article class="explore-sector${selected ? ' is-selected' : ''}"><button class="explore-sector__trigger" type="button" aria-pressed="${selected}" data-sector-name="${esc(sector.name)}"><span class="explore-sector__top"><span class="explore-sector__index">${String(index + 1).padStart(2, '0')}</span><span class="tag tag--${sector.status === 'potential' ? 'paid' : 'info'}">${sector.status === 'potential' ? '潜力方向' : '持续增长'}</span></span><span class="explore-sector__title" role="heading" aria-level="3">${esc(sector.name)}<span class="explore-sector__open" aria-hidden="true">查看样本 ↗</span></span><span class="explore-sector__metrics"><span><strong class="num">${esc(metric(sector.growingChannelCount))}</strong> 个增长样本</span><span><strong class="num">${esc(metric(sector.channelCount))}</strong> 个频道</span></span></button>${examples.length ? `<div class="explore-sector__examples">${examples.map(example => { const channelHref = example.youtubeId ? `https://www.youtube.com/channel/${encodeURIComponent(example.youtubeId)}` : ''; return channelHref ? `<a href="${esc(channelHref)}" target="_blank" rel="noopener" title="打开 ${esc(example.title || '频道样本')}">${esc(example.title || '频道样本')} ↗</a>` : `<span title="${esc(example.title)}">${esc(example.title || '频道样本')}</span>`; }).join('')}</div>` : ''}</article>`;
+      return `<article class="explore-sector${selected ? ' is-selected' : ''}"><button class="explore-sector__trigger" type="button" aria-pressed="${selected}" data-sector-name="${esc(sector.name)}"><span class="explore-sector__top"><span class="explore-sector__index">${String(index + 1).padStart(2, '0')}</span><span class="tag tag--${sector.status === 'potential' ? 'paid' : 'info'}">${({ potential: '潜力方向', validating: '验证中', unclassified: '未归类' })[sector.status] || '持续增长'}</span></span><span class="explore-sector__title" role="heading" aria-level="3">${esc(sector.name)}<span class="explore-sector__open" aria-hidden="true">查看样本 ↗</span></span><span class="explore-sector__metrics"><span><strong class="num">${esc(metric(sector.growingChannelCount))}</strong> 个增长样本</span><span><strong class="num">${esc(metric(sector.channelCount))}</strong> 个频道</span></span></button>${examples.length ? `<div class="explore-sector__examples">${examples.map(example => { const channelHref = example.youtubeId ? `https://www.youtube.com/channel/${encodeURIComponent(example.youtubeId)}` : ''; return channelHref ? `<a href="${esc(channelHref)}" target="_blank" rel="noopener" title="打开 ${esc(example.title || '频道样本')}">${esc(example.title || '频道样本')} ↗</a>` : `<span title="${esc(example.title)}">${esc(example.title || '频道样本')}</span>`; }).join('')}</div>` : ''}</article>`;
     }).join('');
     const more = sectorItems.length > visibleSectorCount ? `<div class="explore-more"><button class="btn" type="button" id="showMoreSectors">查看更多赛道（剩余 ${sectorItems.length - visibleSectorCount} 个）</button></div>` : '';
     $('#sectors').innerHTML = cards + more;
@@ -122,6 +123,55 @@
     $('#resultUpdated').textContent = data.sourceRun?.id ? `第 ${data.sourceRun.id} 轮研究` : '';
     $('#footnote').textContent = syncedAt ? `本站缓存于 ${syncedAt} 更新。同步周期 ${syncHours} 小时；外部数据暂时不可用时保留上一次成功结果。` : '数据正在准备中，完成首轮同步后会自动显示。';
   }
+  /* Share: logged-in members share with their referral code so new sign-ups
+     from this page count toward the existing invite commission. */
+  let shareUrlPromise = null;
+  function shareUrl() {
+    if (!shareUrlPromise) shareUrlPromise = (async () => {
+      const url = new URL('exploration.html', window.location.href);
+      let code = '';
+      if (App.session.loggedIn()) {
+        try { const data = await App.api('/api/v1/me/referral'); const info = data.referral || data; if (info.enabled !== false) code = info.code || ''; } catch {}
+      }
+      if (code) url.searchParams.set('ref', code);
+      return { url: url.href, code };
+    })();
+    return shareUrlPromise;
+  }
+  async function renderShareQr() {
+    const box = $('#trackShareQr');
+    if (!box || !window.Share) return;
+    const { url, code } = await shareUrl();
+    const canvas = window.Share.qrCanvas(url, 136, { margin: 6 });
+    if (canvas) { box.innerHTML = ''; box.appendChild(canvas); }
+    $('#trackShareNote').textContent = code ? `已带上你的邀请码 ${code}，好友注册后计入你的邀请收益。` : '登录后分享，好友注册会计入你的邀请收益。';
+  }
+  async function openShare() {
+    const { url, code } = await shareUrl();
+    const top = sectorItems.filter(sector => sector.status !== 'unclassified').slice(0, 3).map(sector => `${sector.name} · ${metric(sector.growingChannelCount)} 个增长样本`);
+    window.Share.open({ kind: 'track', sheetTitle: '分享赛道挖掘', title: '赛道挖掘', excerpt: '找到新赛道，然后，抄！', url, shareLink: url, code, kicker: '月入万刀 · 赛道挖掘', headline: ['找到新赛道，', '然后，抄！'], items: top, note: code ? `邀请码 ${code}` : '扫码查看最新赛道' });
+  }
+  document.querySelectorAll('[data-share-track]').forEach(button => button.addEventListener('click', openShare));
+
+  /* Inside WeChat, the share card (logo + one-line description) needs the
+     JS-SDK. The server answers 503 until a 公众号 is configured; then this
+     silently does nothing and WeChat falls back to its default card. */
+  async function setupWechatShare() {
+    if (!/MicroMessenger/i.test(navigator.userAgent)) return;
+    try {
+      const config = await App.api(`/api/v1/wechat/js-config?url=${encodeURIComponent(location.href.split('#')[0])}`, { auth: false });
+      await new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = 'https://res.wx.qq.com/open/js/jweixin-1.6.0.js'; script.onload = resolve; script.onerror = reject; document.head.appendChild(script); });
+      const { url } = await shareUrl();
+      const card = { title: '赛道挖掘 · 月入万刀', desc: '找到新赛道，然后，抄！', link: url, imgUrl: new URL('assets/iyesh-share.png', location.href).href };
+      window.wx.config({ debug: false, appId: config.appId, timestamp: config.timestamp, nonceStr: config.nonceStr, signature: config.signature, jsApiList: ['updateAppMessageShareData', 'updateTimelineShareData'] });
+      window.wx.ready(() => {
+        window.wx.updateAppMessageShareData(card);
+        window.wx.updateTimelineShareData({ title: `${card.title}｜${card.desc}`, link: card.link, imgUrl: card.imgUrl });
+      });
+    } catch {}
+  }
+  setupWechatShare();
+
   async function load() {
     renderLoading();
     try {
@@ -136,4 +186,5 @@
     }
   }
   load();
+  renderShareQr();
 })();

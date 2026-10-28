@@ -1530,6 +1530,39 @@ async function syncTrackDiscovery({ force = false } = {}) {
   })()
   return trackDiscoverySyncPromise
 }
+/* WeChat JS-SDK share card (title / description / logo thumbnail). WeChat
+   only honours a custom share card after wx.config with a signature from a
+   verified 公众号 whose JS 安全域名 includes this site. Inert until
+   WECHAT_MP_APPID and WECHAT_MP_SECRET are set. */
+const WECHAT_MP_APPID = String(process.env.WECHAT_MP_APPID || '').trim()
+const WECHAT_MP_SECRET = String(process.env.WECHAT_MP_SECRET || '').trim()
+let wechatJsTicket = { value: '', expiresAt: 0, pending: null }
+async function wechatJsapiTicket() {
+  if (wechatJsTicket.value && Date.now() < wechatJsTicket.expiresAt) return wechatJsTicket.value
+  if (wechatJsTicket.pending) return wechatJsTicket.pending
+  wechatJsTicket.pending = (async () => {
+    const tokenUrl = new URL('https://api.weixin.qq.com/cgi-bin/token')
+    tokenUrl.searchParams.set('grant_type', 'client_credential'); tokenUrl.searchParams.set('appid', WECHAT_MP_APPID); tokenUrl.searchParams.set('secret', WECHAT_MP_SECRET)
+    const token = await (await fetch(tokenUrl, { signal: AbortSignal.timeout(8000) })).json()
+    if (!token.access_token) throw new Error(`wechat_token_${token.errcode || 'failed'}`)
+    const ticketUrl = new URL('https://api.weixin.qq.com/cgi-bin/ticket/getticket')
+    ticketUrl.searchParams.set('access_token', token.access_token); ticketUrl.searchParams.set('type', 'jsapi')
+    const ticket = await (await fetch(ticketUrl, { signal: AbortSignal.timeout(8000) })).json()
+    if (!ticket.ticket) throw new Error(`wechat_ticket_${ticket.errcode || 'failed'}`)
+    wechatJsTicket = { value: ticket.ticket, expiresAt: Date.now() + (Math.max(600, Number(ticket.expires_in || 7200)) - 300) * 1000, pending: null }
+    return ticket.ticket
+  })().finally(() => { wechatJsTicket.pending = null })
+  return wechatJsTicket.pending
+}
+function wechatPageUrl(raw) {
+  try {
+    const page = new URL(String(raw || ''))
+    if (page.origin !== new URL(PUBLIC_WEB_BASE_URL).origin) return ''
+    page.hash = ''
+    return page.href
+  } catch { return '' }
+}
+
 function startTrackDiscoverySync() {
   syncTrackDiscovery({ force: true }).catch(() => {})
   const timer = setInterval(() => { syncTrackDiscovery().catch(() => {}) }, TRACK_DISCOVERY_SYNC_INTERVAL_MS)
@@ -1854,6 +1887,20 @@ const server = http.createServer(async (req, res) => {
       const stale = !lastSyncAt || Date.now() - lastSyncAt >= TRACK_DISCOVERY_SYNC_INTERVAL_MS
       if (stale) syncTrackDiscovery().catch(() => {})
       return json(res, 200, { ...trackDiscovery, syncIntervalHours: Math.round(TRACK_DISCOVERY_SYNC_INTERVAL_MS / 3600000), nextSyncAt: lastSyncAt ? new Date(lastSyncAt + TRACK_DISCOVERY_SYNC_INTERVAL_MS).toISOString() : null, stale })
+    }
+    if (req.method === 'GET' && url.pathname === '/api/v1/wechat/js-config') {
+      if (!WECHAT_MP_APPID || !WECHAT_MP_SECRET) return json(res, 503, { message: '未配置公众号分享' })
+      const pageUrl = wechatPageUrl(url.searchParams.get('url'))
+      if (!pageUrl) return json(res, 422, { message: '无效的页面地址' })
+      try {
+        const ticket = await wechatJsapiTicket()
+        const nonceStr = randomBytes(8).toString('hex'); const timestamp = Math.floor(Date.now() / 1000)
+        const signature = createHash('sha1').update(`jsapi_ticket=${ticket}&noncestr=${nonceStr}&timestamp=${timestamp}&url=${pageUrl}`).digest('hex')
+        return json(res, 200, { appId: WECHAT_MP_APPID, timestamp, nonceStr, signature })
+      } catch (error) {
+        console.error(`[wechat-js] ${error instanceof Error ? error.message : String(error)}`)
+        return json(res, 502, { message: '微信分享配置暂不可用' })
+      }
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/analytics/visit') {
       const input = await readBody(req)

@@ -432,6 +432,15 @@
     fetch(`${API}/api/v1/analytics/visit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload, keepalive: true }).catch(() => {});
   }
 
+  /* A shared page (e.g. 赛道挖掘) can carry ?ref=CODE. Keep it until the
+     visitor registers so the invite still counts if they browse first. */
+  function rememberReferral() {
+    try {
+      const code = String(new URLSearchParams(location.search).get('ref') || '').trim().slice(0, 80);
+      if (code && !session.loggedIn()) localStorage.setItem('iyesh:ref', code);
+    } catch {}
+  }
+
   /* ---------------- misc ---------------- */
   function debounce(fn, wait = 250) { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), wait); }; }
   /* Auto-growing textareas: the page stays the only scroll surface. A shared
@@ -523,5 +532,6 @@
   markNav();
   watchKeyboard();
   trackPageView();
+  rememberReferral();
   if (!document.body.hasAttribute('data-skip-me')) refreshMe();
 })();

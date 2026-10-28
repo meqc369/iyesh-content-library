@@ -269,20 +269,20 @@
     ctx.fillStyle = '#f4f5f1'; ctx.fillRect(0, 0, W, H);
     await drawBand(ctx, W, 300, assets);
     ctx.fillStyle = '#b9c8e6'; ctx.font = `400 14px ${FONT}`;
-    ctx.fillText(`${meta.name || '你的朋友'} 邀请你加入`, 22, 118);
+    ctx.fillText(meta.kicker || `${meta.name || '你的朋友'} 邀请你加入`, 22, 118);
     ctx.fillStyle = '#ffffff'; ctx.font = `750 30px ${FONT}`;
-    ['把经验，变成', '可复用的增长'].forEach((line, index) => ctx.fillText(line, 22, 162 + index * 42));
+    (meta.headline || ['把经验，变成', '可复用的增长']).forEach((line, index) => ctx.fillText(line, 22, 162 + index * 42));
     const x = 18; const w = 339; const y = 266; const h = 160;
     ctx.save(); ctx.shadowColor = 'rgba(20,32,51,.16)'; ctx.shadowBlur = 26; ctx.shadowOffsetY = 10;
     ctx.fillStyle = '#ffffff'; roundRect(ctx, x, y, w, h, 18); ctx.fill(); ctx.restore();
-    const items = ['YouTube 出海实战打法，持续更新', '会员内容、积分打赏与签到奖励', '发布你的方法与案例，获得收益'];
+    const items = (meta.items?.length ? meta.items : ['YouTube 出海实战打法，持续更新', '会员内容、积分打赏与签到奖励', '发布你的方法与案例，获得收益']).slice(0, 3);
     items.forEach((item, index) => {
       const cy = y + 40 + index * 42;
       ctx.fillStyle = '#1b7550'; ctx.beginPath(); ctx.arc(x + 30, cy - 5, 9, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 25.5, cy - 5); ctx.lineTo(x + 28.5, cy - 2); ctx.lineTo(x + 34.5, cy - 8.5); ctx.stroke();
-      ctx.fillStyle = '#142033'; ctx.font = `500 15px ${FONT}`; ctx.fillText(item, x + 50, cy);
+      ctx.fillStyle = '#142033'; ctx.font = `500 15px ${FONT}`; ctx.fillText(wrap(ctx, item, w - 72, 1)[0], x + 50, cy);
     });
-    drawNote(ctx, assets, { x, y: y + h + 16, w, h: 128, url: meta.url, title: '长按识别二维码', line2: meta.code ? `邀请码 ${meta.code}` : '注册即可加入', line3: hostLabel(meta.url) });
+    drawNote(ctx, assets, { x, y: y + h + 16, w, h: 128, url: meta.url, title: '长按识别二维码', line2: meta.note || (meta.code ? `邀请码 ${meta.code}` : '注册即可加入'), line3: hostLabel(meta.url) });
     ctx.fillStyle = '#959dab'; ctx.font = `400 11px ${FONT}`; ctx.textAlign = 'center';
     ctx.fillText('月入万刀  iyesh.com', W / 2, H - 16);
     return canvas;
@@ -297,6 +297,7 @@
     const id = meta.id || meta.postId || '';
     const url = meta.url || (id ? postUrl(id) : location.href);
     return {
+      ...meta,
       kind: meta.kind || 'post',
       id,
       title: String(meta.title || document.title || '月入万刀').trim(),
@@ -313,6 +314,7 @@
   }
   function shareText(meta) {
     if (meta.kind === 'invite') return `${meta.name || '我'}邀请你加入月入万刀，一起把经验变成可复用的增长。\n${meta.url}`;
+    if (meta.kind === 'track') return `${meta.excerpt || meta.title}\n${meta.shareLink}`;
     return [`《${meta.title}》`, meta.excerpt, meta.shareLink].filter(Boolean).join('\n');
   }
 
@@ -332,9 +334,9 @@
       </div>`;
     if (!navigator.share) body.querySelector('.share-actions').style.gridTemplateColumns = 'repeat(3, 1fr)';
     let posterUrl = '';
-    App.modal({ title: meta.kind === 'invite' ? '邀请好友' : '分享内容', body, className: 'share-modal', onOpen: async () => {
+    App.modal({ title: meta.sheetTitle || (meta.kind === 'invite' ? '邀请好友' : '分享内容'), body, className: 'share-modal', onOpen: async () => {
       try {
-        const canvas = meta.kind === 'invite' ? await drawInvitePoster(meta) : await drawPostPoster(meta);
+        const canvas = meta.kind === 'invite' || meta.kind === 'track' ? await drawInvitePoster(meta) : await drawPostPoster(meta);
         posterUrl = canvasToUrl(canvas);
         const frame = body.querySelector('.poster-frame');
         if (!posterUrl) throw new Error('poster');

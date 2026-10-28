@@ -6,10 +6,25 @@
   <meta name="theme-color" content="#13213b">
   <meta name="format-detection" content="telephone=no">
   <title>赛道挖掘 · 月入万刀</title>
-  <meta name="description" content="从公开数据中发现正在加速的 YouTube 内容赛道和频道。">
+  <meta name="description" content="找到新赛道，然后，抄！">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="月入万刀">
+  <meta property="og:title" content="赛道挖掘 · 月入万刀">
+  <meta property="og:description" content="找到新赛道，然后，抄！">
+  <meta property="og:url" content="https://iyesh.com/exploration.html">
+  <meta property="og:image" content="https://iyesh.com/assets/iyesh-share.png">
+  <meta property="og:image:width" content="300">
+  <meta property="og:image:height" content="300">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="赛道挖掘 · 月入万刀">
+  <meta name="twitter:description" content="找到新赛道，然后，抄！">
+  <meta name="twitter:image" content="https://iyesh.com/assets/iyesh-share.png">
+  <meta itemprop="name" content="赛道挖掘 · 月入万刀">
+  <meta itemprop="description" content="找到新赛道，然后，抄！">
+  <meta itemprop="image" content="https://iyesh.com/assets/iyesh-share.png">
   <link rel="icon" type="image/png" href="assets/iyesh-favicon.png">
   <link rel="preload" href="assets/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20261024r1">
+  <link rel="stylesheet" href="styles.css?v=20261028r1">
 </head>
 <body data-page="exploration">
   <a class="sr-only" href="#explorationContent">跳到赛道挖掘内容</a>
@@ -32,6 +47,7 @@
         <h1>赛道挖掘</h1>
         <p>把正在发生的增长信号整理成可观察的方向，先看赛道，再决定要不要投入时间。</p>
         <div class="explore-hero__meta"><span>只展示已完成研究中的成功信号</span><span aria-hidden="true">·</span><span data-sync-interval>每 4 小时同步一次</span></div>
+        <div class="explore-hero__actions"><button class="btn btn--sm explore-share-btn" type="button" data-share-track data-icon="share">分享给朋友</button></div>
       </div>
     </section>
 
@@ -43,6 +59,13 @@
           <div class="explore-sector-grid" id="sectors" aria-live="polite"></div>
         </section>
         <aside class="explore-aside">
+          <section class="sheet explore-share">
+            <div class="panel-head"><div><p class="explore-kicker">分享</p><h2>扫码把赛道发给朋友</h2></div></div>
+            <div class="explore-share__body">
+              <div class="explore-share__qr" id="trackShareQr" aria-label="赛道挖掘分享二维码"><span class="spinner" aria-hidden="true"></span></div>
+              <div><p id="trackShareNote">登录后分享，好友注册会计入你的邀请收益。</p><button class="btn btn--primary btn--sm" type="button" data-share-track data-icon="share">生成分享海报</button></div>
+            </div>
+          </section>
           <section class="sheet explore-source">
             <div class="panel-head"><div><p class="explore-kicker">阅读提示</p><h2>先看重复出现的信号</h2></div><span class="tag tag--info">YouTube</span></div>
             <p>同一方向出现多个新频道，且视频持续获得播放，才值得继续验证。数据来自公开指标，不代表官方 YPP、收入或结果承诺。</p>
@@ -71,7 +94,9 @@
   </nav>
 
   <script src="api-config.js?v=20261022r2"></script>
-  <script src="core.js?v=20261022r2"></script>
-  <script src="exploration.js?v=20261024r1"></script>
+  <script src="core.js?v=20261028r1"></script>
+  <script src="assets/vendor/qrcode.js?v=20261022r2"></script>
+  <script src="share.js?v=20261028r1"></script>
+  <script src="exploration.js?v=20261028r1"></script>
 </body>
 </html>
